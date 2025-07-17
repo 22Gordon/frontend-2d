@@ -1,0 +1,13 @@
+{
+    "312": {
+      "position": { "x": 100, "y": 150 },
+      "zone": "A",
+      "status": "active"
+    },
+    "313": {
+      "position": { "x": 300, "y": 150 },
+      "zone": "A",
+      "status": "inactive"
+    }
+  }
+  
