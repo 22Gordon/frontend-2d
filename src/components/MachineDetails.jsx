@@ -17,7 +17,7 @@ function MachineDetails({ machineId, data }) {
       {Object.entries(data).map(([key, attr]) => (
         attr?.value !== undefined && (
           <p key={key}>
-            <strong>{key}:</strong> {attr.value.toString()}
+            <strong>{key}:</strong> {typeof attr.value === "object" ? JSON.stringify(attr.value) : attr.value.toString()}
           </p>
         )
       ))}

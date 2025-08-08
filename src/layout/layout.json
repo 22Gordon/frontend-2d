@@ -1,13 +1,27 @@
 {
-    "312": {
-      "position": { "x": 100, "y": 150 },
-      "zone": "A",
-      "status": "active"
-    },
-    "313": {
-      "position": { "x": 300, "y": 150 },
-      "zone": "A",
-      "status": "inactive"
-    }
+  "312": {
+    "position": { "x": 100, "y": 150 },
+    "zone": "A",
+    "status": "active"
+  },
+  "313": {
+    "position": { "x": 300, "y": 150 },
+    "zone": "A",
+    "status": "inactive"
+  },
+  "314": {
+    "position": { "x": 100, "y": 300 },
+    "zone": "B",
+    "status": "active"
+  },
+  "315": {
+    "position": { "x": 300, "y": 300 },
+    "zone": "B",
+    "status": "active"
+  },
+  "316": {
+    "position": { "x": 500, "y": 300 },
+    "zone": "C",
+    "status": "inactive"
   }
-  
+}
