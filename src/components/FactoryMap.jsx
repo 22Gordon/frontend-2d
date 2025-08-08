@@ -1,9 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Stage, Layer, Rect, Text } from "react-konva";
 import layoutData from "../layout/layout.json";
-
-const BOX_WIDTH = 60;
-const BOX_HEIGHT = 60;
+import "./FactoryMap.css";
 
 function FactoryMap({ onSelectMachine, machineData }) {
   const [machines, setMachines] = useState({});
@@ -13,33 +10,26 @@ function FactoryMap({ onSelectMachine, machineData }) {
   }, []);
 
   return (
-    <div>
-      <Stage width={800} height={400}>
-        <Layer>
-          {Object.entries(machines).map(([id, data]) => (
-            <React.Fragment key={id}>
-              <Rect
-                x={data.position.x}
-                y={data.position.y}
-                width={BOX_WIDTH}
-                height={BOX_HEIGHT}
-                fill={data.status === "active" ? "green" : "red"}
-                cornerRadius={10}
-                shadowBlur={5}
-                onClick={() => onSelectMachine(id)}
-              />
-              <Text
-                x={data.position.x}
-                y={data.position.y + BOX_HEIGHT + 5}
-                text={`Machine ${id}`}
-                fontSize={14}
-                fill="#fff"
-              />
-            </React.Fragment>
-          ))}
-        </Layer>
-      </Stage>
-    </div>
+    <div className="factory-map">
+  {Object.entries(machines).map(([id, data]) => {
+    const machineInfo = machineData[id];
+    const status = machineInfo?.status || data.status || "inactive"; // prioridade: dados ao vivo > layout > default
+
+    return (
+      <div
+        key={id}
+        className={`machine ${status === "active" ? "active" : "inactive"}`}
+        style={{
+          top: data.position.y,
+          left: data.position.x
+        }}
+        onClick={() => onSelectMachine(id)}
+      >
+        <span className="machine-label">{id}</span>
+      </div>
+    );
+  })}
+</div>
   );
 }
 
