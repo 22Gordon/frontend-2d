@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback } from "react";
+import './index.css';
 import FactoryMap from "./components/FactoryMap";
 import MachineDetails from "./components/MachineDetails";
 import ZoneSelector from "./components/ZoneSelector";
+import Sidebar from "./components/Sidebar";
 import layoutData from "./layout/layout.json";
 import { getMachineDataFromOrion } from "./services/orionClient";
 
@@ -38,23 +40,36 @@ function App() {
     setSelectedMachine(null);
   };
 
-  return (
-    <div style={{ padding: 30 }}>
-      <ZoneSelector selectedZone={selectedZone} onChangeZone={handleZoneChange} />
+  const zoneMachines = layoutData[selectedZone]?.machines || {};
 
-      <div style={{ display: "flex", gap: 60 }}>
-        <FactoryMap
+  return (
+    <div style={{ display: "flex", height: "100vh" }}>
+      <Sidebar
+        machines={Object.keys(zoneMachines)}
+        selectedMachine={selectedMachine}
+        onSelectMachine={handleSelectMachine}
+      />
+
+      <div style={{ flex: 1, padding: 30 }}>
+        <ZoneSelector
           selectedZone={selectedZone}
-          onSelectMachine={handleSelectMachine}
-          machineData={machineData}
+          onChangeZone={handleZoneChange}
         />
-        <div>
-          {selectedMachine && (
-            <MachineDetails
-              machineId={selectedMachine}
-              data={machineData[selectedMachine] || null}
-            />
-          )}
+
+        <div style={{ display: "flex", gap: 60 }}>
+          <FactoryMap
+            selectedZone={selectedZone}
+            onSelectMachine={handleSelectMachine}
+            machineData={machineData}
+          />
+          <div>
+            {selectedMachine && (
+              <MachineDetails
+                machineId={selectedMachine}
+                data={machineData[selectedMachine] || null}
+              />
+            )}
+          </div>
         </div>
       </div>
     </div>

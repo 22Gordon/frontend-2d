@@ -5,6 +5,10 @@
       "312": {
         "position": { "x": 100, "y": 150 },
         "status": "active"
+      },
+      "311": {
+        "position": { "x": 200, "y": 160 },
+        "status": "inactive"
       }
     }
   },
