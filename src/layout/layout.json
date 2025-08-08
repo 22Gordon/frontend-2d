@@ -1,27 +1,56 @@
 {
-  "312": {
-    "position": { "x": 100, "y": 150 },
-    "zone": "A",
-    "status": "active"
+  "A": {
+    "image": "1.PNG",
+    "machines": {
+      "312": {
+        "position": { "x": 100, "y": 150 },
+        "status": "active"
+      }
+    }
   },
-  "313": {
-    "position": { "x": 300, "y": 150 },
-    "zone": "A",
-    "status": "inactive"
+  "B": {
+    "image": "2.PNG",
+    "machines": {
+      "313": {
+        "position": { "x": 150, "y": 200 },
+        "status": "inactive"
+      }
+    }
   },
-  "314": {
-    "position": { "x": 100, "y": 300 },
-    "zone": "B",
-    "status": "active"
+  "C": {
+    "image": "3.PNG",
+    "machines": {
+      "314": {
+        "position": { "x": 180, "y": 220 },
+        "status": "active"
+      }
+    }
   },
-  "315": {
-    "position": { "x": 300, "y": 300 },
-    "zone": "B",
-    "status": "active"
+  "D": {
+    "image": "4.PNG",
+    "machines": {
+      "315": {
+        "position": { "x": 140, "y": 210 },
+        "status": "inactive"
+      }
+    }
   },
-  "316": {
-    "position": { "x": 500, "y": 300 },
-    "zone": "C",
-    "status": "inactive"
+  "E": {
+    "image": "5.PNG",
+    "machines": {
+      "316": {
+        "position": { "x": 120, "y": 190 },
+        "status": "active"
+      }
+    }
+  },
+  "F": {
+    "image": "6.PNG",
+    "machines": {
+      "317": {
+        "position": { "x": 170, "y": 170 },
+        "status": "inactive"
+      }
+    }
   }
 }

@@ -1,44 +1,61 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import FactoryMap from "./components/FactoryMap";
 import MachineDetails from "./components/MachineDetails";
+import ZoneSelector from "./components/ZoneSelector";
 import layoutData from "./layout/layout.json";
 import { getMachineDataFromOrion } from "./services/orionClient";
 
 function App() {
   const [selectedMachine, setSelectedMachine] = useState(null);
+  const [selectedZone, setSelectedZone] = useState("A");
   const [machineData, setMachineData] = useState({});
+
+  const fetchAndSetMachineData = useCallback(async (machineId) => {
+    const data = await getMachineDataFromOrion(machineId);
+    if (data) {
+      setMachineData((prev) => ({ ...prev, [machineId]: data }));
+    }
+  }, []);
 
   const handleSelectMachine = (machineId) => {
     setSelectedMachine(machineId);
+    fetchAndSetMachineData(machineId);
   };
 
   useEffect(() => {
-    const interval = setInterval(async () => {
-      const ids = Object.keys(layoutData);
-      for (const id of ids) {
-        const data = await getMachineDataFromOrion(id);
-        if (data) {
-          setMachineData((prev) => ({ ...prev, [id]: data }));
-        }
-      }
+    const interval = setInterval(() => {
+      const zoneMachines = layoutData[selectedZone]?.machines || {};
+      Object.keys(zoneMachines).forEach((id) => {
+        fetchAndSetMachineData(id);
+      });
     }, 5000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [selectedZone, fetchAndSetMachineData]);
+
+  const handleZoneChange = (zone) => {
+    setSelectedZone(zone);
+    setSelectedMachine(null);
+  };
 
   return (
-    <div style={{ display: "flex", padding: 40 }}>
-      <FactoryMap
-        onSelectMachine={handleSelectMachine}
-        machineData={machineData}
-      />
-      <div style={{ marginLeft: 60 }}>
-        {selectedMachine && (
-          <MachineDetails
-            machineId={selectedMachine}
-            data={machineData[selectedMachine] || null}
-          />
-        )}
+    <div style={{ padding: 30 }}>
+      <ZoneSelector selectedZone={selectedZone} onChangeZone={handleZoneChange} />
+
+      <div style={{ display: "flex", gap: 60 }}>
+        <FactoryMap
+          selectedZone={selectedZone}
+          onSelectMachine={handleSelectMachine}
+          machineData={machineData}
+        />
+        <div>
+          {selectedMachine && (
+            <MachineDetails
+              machineId={selectedMachine}
+              data={machineData[selectedMachine] || null}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
