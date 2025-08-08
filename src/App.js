@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import FactoryMap from "./components/FactoryMap";
 import MachineDetails from "./components/MachineDetails";
+import layoutData from "./layout/layout.json";
 import { getMachineDataFromOrion } from "./services/orionClient";
 
 function App() {
@@ -13,7 +14,7 @@ function App() {
 
   useEffect(() => {
     const interval = setInterval(async () => {
-      const ids = ["312"]; // IDs das máquinas a atualizar automaticamente
+      const ids = Object.keys(layoutData);
       for (const id of ids) {
         const data = await getMachineDataFromOrion(id);
         if (data) {
@@ -29,9 +30,6 @@ function App() {
     <div style={{ display: "flex", padding: 40 }}>
       <FactoryMap
         onSelectMachine={handleSelectMachine}
-        onUpdateData={(id, data) =>
-          setMachineData((prev) => ({ ...prev, [id]: data }))
-        }
         machineData={machineData}
       />
       <div style={{ marginLeft: 60 }}>

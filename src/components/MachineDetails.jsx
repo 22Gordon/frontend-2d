@@ -14,31 +14,13 @@ function MachineDetails({ machineId, data }) {
       }}
     >
       <h2 style={{ marginBottom: 20 }}>Máquina {machineId}</h2>
-
-      {/* Exemplo de atributo fictício para estado */}
-      {data.status && (
-        <p>
-          <strong>Estado:</strong> {data.status.value === "active" ? "Ativa" : "Inativa"}
-        </p>
-      )}
-
-      {data.TotalActiveEnergy && (
-        <p>
-          <strong>Consumo de Energia:</strong> {data.TotalActiveEnergy.value} kWh
-        </p>
-      )}
-
-      {data.gasUsage && (
-        <p>
-          <strong>Consumo de Gás:</strong> {data.gasUsage.value} m³
-        </p>
-      )}
-
-      {data.distance && (
-        <p>
-          <strong>Distância:</strong> {data.distance.value} m
-        </p>
-      )}
+      {Object.entries(data).map(([key, attr]) => (
+        attr?.value !== undefined && (
+          <p key={key}>
+            <strong>{key}:</strong> {attr.value.toString()}
+          </p>
+        )
+      ))}
     </div>
   );
 }

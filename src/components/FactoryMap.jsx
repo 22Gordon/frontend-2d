@@ -1,36 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { Stage, Layer, Rect, Text } from "react-konva";
 import layoutData from "../layout/layout.json";
-import { getMachineDataFromOrion } from "../services/orionClient";
 
 const BOX_WIDTH = 60;
 const BOX_HEIGHT = 60;
 
-function FactoryMap({ onSelectMachine, onUpdateData, machineData }) {
+function FactoryMap({ onSelectMachine, machineData }) {
   const [machines, setMachines] = useState({});
 
   useEffect(() => {
     setMachines(layoutData);
   }, []);
-
-  useEffect(() => {
-    const intervals = [];
-
-    Object.entries(machines).forEach(([id, machine]) => {
-      const isActive = machine.status === "active";
-      if (isActive) {
-        const interval = setInterval(async () => {
-          const data = await getMachineDataFromOrion(id);
-          if (data) {
-            onUpdateData(id, data);
-          }
-        }, 5000);
-        intervals.push(interval);
-      }
-    });
-
-    return () => intervals.forEach((int) => clearInterval(int));
-  }, [machines, onUpdateData]);
 
   return (
     <div>
@@ -46,14 +26,7 @@ function FactoryMap({ onSelectMachine, onUpdateData, machineData }) {
                 fill={data.status === "active" ? "green" : "red"}
                 cornerRadius={10}
                 shadowBlur={5}
-                onClick={() => {
-                  onSelectMachine(id);
-                  if (data.status === "active") {
-                    getMachineDataFromOrion(id).then((d) => {
-                      if (d) onUpdateData(id, d);
-                    });
-                  }
-                }}
+                onClick={() => onSelectMachine(id)}
               />
               <Text
                 x={data.position.x}
