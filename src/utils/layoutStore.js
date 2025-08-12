@@ -3,21 +3,14 @@ import rawLayout from "../layout/layout.json";
 const LS_KEY = "factory_layout_overlay_v1";
 
 function loadOverlay() {
-  try {
-    return JSON.parse(localStorage.getItem(LS_KEY) || "{}");
-  } catch {
-    return {};
-  }
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || "{}"); }
+  catch { return {}; }
 }
+function saveOverlay(overlay) { localStorage.setItem(LS_KEY, JSON.stringify(overlay)); }
 
-function saveOverlay(overlay) {
-  localStorage.setItem(LS_KEY, JSON.stringify(overlay));
-}
-
-let overlay = loadOverlay(); // { [zone]: { machines: { [id]: { position, status } } } }
+let overlay = loadOverlay(); // { [zone]: { machines: { [id]: {...} } } }
 
 export function getEffectiveLayout() {
-  // merge superficial: rawLayout + overlay
   const out = JSON.parse(JSON.stringify(rawLayout));
   for (const zone of Object.keys(overlay)) {
     out[zone] = out[zone] || { image: "", machines: {} };
@@ -38,10 +31,7 @@ export function listLayoutMachineIds(layoutObj = getEffectiveLayout()) {
 export function addMachineToLayout({ zone, id, x, y, status = "inactive" }) {
   overlay[zone] = overlay[zone] || { machines: {} };
   overlay[zone].machines = overlay[zone].machines || {};
-  overlay[zone].machines[id] = {
-    position: { x, y },
-    status,
-  };
+  overlay[zone].machines[id] = { position: { x, y }, status };
   saveOverlay(overlay);
 }
 
@@ -54,4 +44,47 @@ export function exportEffectiveLayoutAsJson() {
   a.download = "layout.export.json";
   a.click();
   URL.revokeObjectURL(url);
+}
+
+
+// Em que zona está um id (considera layout efetivo)
+export function findMachineZone(id, layoutObj = getEffectiveLayout()) {
+  for (const z of Object.keys(layoutObj)) {
+    if (layoutObj[z]?.machines && layoutObj[z].machines[id]) return z;
+  }
+  return null;
+}
+
+// é uma máquina criada no overlay (não no JSON base)?
+export function isOverlayMachine(zone, id) {
+  return Boolean(overlay[zone]?.machines && overlay[zone].machines[id]);
+}
+
+// remover (apenas overlay por agora; não apaga layout base)
+export function removeMachineFromLayout(zone, id) {
+  if (!overlay[zone]?.machines?.[id]) return false; // não existe no overlay
+  delete overlay[zone].machines[id];
+  if (Object.keys(overlay[zone].machines).length === 0) delete overlay[zone].machines;
+  if (Object.keys(overlay[zone] || {}).length === 0) delete overlay[zone];
+  saveOverlay(overlay);
+  return true;
+}
+
+// mover entre zonas (só efetivo para máquinas do overlay ou novas)
+// para as do layout base, isto cria na nova zona mas NÃO remove da antiga (precisa de “mask” – faço depois)
+export function moveMachineToZone({ id, fromZone, toZone, x, y }) {
+  // se existir no overlay na zona antiga, apaga
+  if (overlay[fromZone]?.machines?.[id]) {
+    delete overlay[fromZone].machines[id];
+  }
+  // adiciona na nova
+  addMachineToLayout({ zone: toZone, id, x, y, status: "inactive" });
+}
+
+// atualizar posição (drag & drop futuro)
+export function setMachinePosition({ zone, id, x, y }) {
+  if (!overlay[zone]?.machines?.[id]) return false;
+  overlay[zone].machines[id].position = { x, y };
+  saveOverlay(overlay);
+  return true;
 }

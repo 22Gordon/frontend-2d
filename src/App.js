@@ -9,6 +9,7 @@ import ZoneSelector from "./components/ZoneSelector";
 import Sidebar from "./components/Sidebar";
 import Spinner from "./components/Spinner";
 import AddMachinePanel from "./components/AddMachinePanel";
+import Modal from "./components/Modal";
 
 import { getMachineDataFromOrion } from "./services/orionClient";
 import {
@@ -112,7 +113,7 @@ function App() {
 
         {zoneErrors.length > 0 && (
           <div className="alert">
-            <strong>Orion:</strong> {zoneErrors.length} máquina(s) sem dados.{" "}
+            <strong>Orion:</strong> {zoneErrors.length} máquina(s) sem dados{" "}
             <button
               className="btn btn--solid"
               onClick={() => zoneErrors.forEach(fetchAndSetMachineData)}
@@ -161,25 +162,12 @@ function App() {
         </div>
       </div>
 
-      {openAdd && (
-        <div
-          style={{
-            position: "absolute",
-            right: 16,
-            top: 16,
-            width: 320,
-            maxHeight: 600,
-            overflow: "auto",
-            background: "#111",
-            border: "1px solid #333",
-            borderRadius: 12,
-            boxShadow: "0 4px 16px rgba(0,0,0,0.35)",
-            zIndex: 10,
-          }}
-        >
-          <AddMachinePanel selectedZone={selectedZone} onEnterPlaceMode={handleEnterPlaceMode} />
-        </div>
-      )}
+      <Modal open={openAdd} onClose={() => setOpenAdd(false)}>
+        <AddMachinePanel
+          selectedZone={selectedZone}
+          onEnterPlaceMode={handleEnterPlaceMode}
+        />
+      </Modal>
     </div>
   );
 }
