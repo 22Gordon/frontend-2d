@@ -1,8 +1,21 @@
-import React from "react";
-import layoutData from "../layout/layout.json";
+// FactoryMap.jsx
+import React, { useRef } from "react";
+import { getEffectiveLayout } from "../utils/layoutStore";
 import "../components/FactoryMap.css";
 
-function FactoryMap({ selectedZone, onSelectMachine, machineData, selectedMachine }) {
+function FactoryMap({
+  selectedZone,
+  onSelectMachine,
+  machineData,
+  selectedMachine,
+  placementCandidateId,   // novo
+  onPlace,                // novo ({ id, x, y, zone })
+}) {
+  // Hooks SEMPRE antes de qualquer return condicional
+  const containerRef = useRef(null);
+
+  // usar layout efetivo (json + overlay)
+  const layoutData = getEffectiveLayout();
   const zoneData = layoutData[selectedZone];
   if (!zoneData) return <p>Zone not found.</p>;
 
@@ -12,20 +25,38 @@ function FactoryMap({ selectedZone, onSelectMachine, machineData, selectedMachin
   const baseW = zoneData.baseWidth || 800;
   const baseH = zoneData.baseHeight || 600;
 
+  function handleMapClick(e) {
+    if (!placementCandidateId) return;
+
+    const rect = containerRef.current.getBoundingClientRect();
+    const relX = e.clientX - rect.left;
+    const relY = e.clientY - rect.top;
+
+    // como o container está fixo a 800x600, mapeia direto
+    const x = Math.max(0, Math.min(baseW, (relX / rect.width) * baseW));
+    const y = Math.max(0, Math.min(baseH, (relY / rect.height) * baseH));
+
+    onPlace?.({ id: placementCandidateId, x, y, zone: selectedZone });
+  }
+
   return (
     <div
+      ref={containerRef}
       className="factory-map"
       style={{
         backgroundImage: `url(${backgroundImage})`,
         backgroundSize: "contain",
         backgroundRepeat: "no-repeat",
         backgroundPosition: "center",
-        width: "800px",   // desktop
-        height: "600px",  // desktop
+        width: "800px",
+        height: "600px",
         position: "relative",
         border: "1px solid #ccc",
         borderRadius: "10px",
+        cursor: placementCandidateId ? "crosshair" : "default",
       }}
+      onClick={handleMapClick}
+      title={placementCandidateId ? "Click to place machine" : undefined}
     >
       {Object.entries(machines).map(([id, data]) => {
         const info = machineData[id];
@@ -43,7 +74,6 @@ function FactoryMap({ selectedZone, onSelectMachine, machineData, selectedMachin
           updated ? `Updated: ${new Date(updated).toLocaleString("en-GB")}` : null,
         ].filter(Boolean).join("\n");
 
-        // Converter posições px -> %
         const topPct = (data.position.y / baseH) * 100;
         const leftPct = (data.position.x / baseW) * 100;
 
@@ -72,7 +102,10 @@ function FactoryMap({ selectedZone, onSelectMachine, machineData, selectedMachin
               zIndex: isSelected ? 2 : 1,
               transition: "all 0.2s ease-in-out",
             }}
-            onClick={() => onSelectMachine(id)}
+            onClick={(ev) => {
+              ev.stopPropagation(); // não dispare o place mode
+              onSelectMachine(id);
+            }}
           >
             {id}
           </div>
@@ -83,8 +116,10 @@ function FactoryMap({ selectedZone, onSelectMachine, machineData, selectedMachin
         <span><div style={{ width: 12, height: 12, background: "green", borderRadius: "50%" }} /></span> Active
         <span style={{ marginLeft: 10 }}><div style={{ width: 12, height: 12, background: "red", borderRadius: "50%" }} /></span> Inactive
         <span style={{ marginLeft: 10 }}><div style={{ width: 12, height: 12, border: "2px solid #00bfff", borderRadius: "50%" }} /></span> Selected
+        {placementCandidateId && <span style={{ marginLeft: 10 }}>• Placing: {placementCandidateId}</span>}
       </div>
     </div>
   );
 }
+
 export default FactoryMap;

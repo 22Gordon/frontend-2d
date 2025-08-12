@@ -1,31 +1,56 @@
+// src/App.js
 import React, { useState, useEffect, useCallback } from "react";
 import "./index.css";
 import "./styles/ui.css";
+
 import FactoryMap from "./components/FactoryMap";
 import MachineDetails from "./components/MachineDetails";
 import ZoneSelector from "./components/ZoneSelector";
 import Sidebar from "./components/Sidebar";
 import Spinner from "./components/Spinner";
-import layoutData from "./layout/layout.json";
+import AddMachinePanel from "./components/AddMachinePanel";
+
 import { getMachineDataFromOrion } from "./services/orionClient";
+import {
+  getEffectiveLayout,
+  addMachineToLayout,
+  exportEffectiveLayoutAsJson,
+} from "./utils/layoutStore";
 
 function App() {
-  const [selectedMachine, setSelectedMachine] = useState(null);
   const [selectedZone, setSelectedZone] = useState("A");
-  const [machineData, setMachineData] = useState({});
-  const [reqState, setReqState] = useState({}); // { [id]: { loading: bool, error: string|null } }
+  const [selectedMachine, setSelectedMachine] = useState(null);
 
+  const [machineData, setMachineData] = useState({});
+  const [reqState, setReqState] = useState({}); // { [id]: { loading, error } }
+
+  // UI: painel Add + modo colocação
+  const [openAdd, setOpenAdd] = useState(false);
+  const [placementCandidateId, setPlacementCandidateId] = useState(null);
+
+  // layout atual (json + overlay) e máquinas da zona, para render
+  const layout = getEffectiveLayout();
+  const zoneMachines = Object.keys(layout[selectedZone]?.machines || {});
+
+  // helpers de estado de pedidos
   const setLoading = (id, loading) =>
-    setReqState(prev => ({ ...prev, [id]: { ...(prev[id]||{}), loading, ...(loading ? { error:null } : {}) }}));
+    setReqState((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), loading, ...(loading ? { error: null } : {}) },
+    }));
+
   const setError = (id, error) =>
-    setReqState(prev => ({ ...prev, [id]: { ...(prev[id]||{}), loading:false, error } }));
+    setReqState((prev) => ({
+      ...prev,
+      [id]: { ...(prev[id] || {}), loading: false, error },
+    }));
 
   const fetchAndSetMachineData = useCallback(async (machineId) => {
     try {
       setLoading(machineId, true);
       const data = await getMachineDataFromOrion(machineId);
       if (data) {
-        setMachineData(prev => ({ ...prev, [machineId]: data }));
+        setMachineData((prev) => ({ ...prev, [machineId]: data }));
         setLoading(machineId, false);
       } else {
         setError(machineId, "No data returned");
@@ -40,11 +65,16 @@ function App() {
     fetchAndSetMachineData(machineId);
   };
 
+  // Polling: 1 intervalo por zona. Busca ids “na hora” do layout efetivo.
   useEffect(() => {
-    const interval = setInterval(() => {
-      const zoneMachines = layoutData[selectedZone]?.machines || {};
-      Object.keys(zoneMachines).forEach(fetchAndSetMachineData);
-    }, 5000);
+    function tick() {
+      const layoutNow = getEffectiveLayout();
+      const ids = Object.keys(layoutNow[selectedZone]?.machines || {});
+      ids.forEach(fetchAndSetMachineData);
+    }
+
+    tick(); // primeira corrida imediata
+    const interval = setInterval(tick, 8000); // ajusta 5–10s conforme precisares
     return () => clearInterval(interval);
   }, [selectedZone, fetchAndSetMachineData]);
 
@@ -53,17 +83,28 @@ function App() {
     setSelectedMachine(null);
   };
 
-  const zoneMachines = layoutData[selectedZone]?.machines || {};
+  // erros recentes nesta zona
+  const zoneErrors = zoneMachines.filter((id) => reqState[id]?.error);
 
-  // algum erro recente nesta zona?
-  const zoneErrors = Object.keys(zoneMachines).filter(id => reqState[id]?.error);
+  // Add machine: entrar em modo colocação
+  function handleEnterPlaceMode(id) {
+    setPlacementCandidateId(id);
+    setOpenAdd(false);
+  }
+
+  // Add machine: click no mapa → guardar no overlay
+  function handlePlace({ id, x, y, zone }) {
+    addMachineToLayout({ zone, id, x, y, status: "inactive" });
+    setPlacementCandidateId(null);
+  }
 
   return (
     <div className="app-shell">
       <Sidebar
-        machines={Object.keys(zoneMachines)}
+        machines={zoneMachines}
         selectedMachine={selectedMachine}
         onSelectMachine={handleSelectMachine}
+        onAddMachine={() => setOpenAdd(true)}
       />
 
       <div className="app-main">
@@ -71,22 +112,41 @@ function App() {
 
         {zoneErrors.length > 0 && (
           <div className="alert">
-            <strong>Orion:</strong> {zoneErrors.length} máquina(s) sem dados.
-            {" "}
-            <button className="btn btn--solid" onClick={() => zoneErrors.forEach(fetchAndSetMachineData)}>
+            <strong>Orion:</strong> {zoneErrors.length} máquina(s) sem dados.{" "}
+            <button
+              className="btn btn--solid"
+              onClick={() => zoneErrors.forEach(fetchAndSetMachineData)}
+            >
               Tentar novamente
             </button>
           </div>
         )}
 
         <div className="content-row">
-          <FactoryMap
-            selectedZone={selectedZone}
-            onSelectMachine={handleSelectMachine}
-            machineData={machineData}
-            selectedMachine={selectedMachine}
-            requestState={reqState}   // <- para feedback no mapa (opcional)
-          />
+          <div>
+            <FactoryMap
+              selectedZone={selectedZone}
+              onSelectMachine={handleSelectMachine}
+              machineData={machineData}
+              selectedMachine={selectedMachine}
+              placementCandidateId={placementCandidateId}
+              onPlace={handlePlace}
+            />
+
+            <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+              <button className="btn btn--ghost" onClick={() => setOpenAdd(true)}>
+                Add machine…
+              </button>
+              <button className="btn" onClick={exportEffectiveLayoutAsJson}>
+                Export layout
+              </button>
+              {placementCandidateId && (
+                <button className="btn btn--ghost" onClick={() => setPlacementCandidateId(null)}>
+                  Cancel place
+                </button>
+              )}
+            </div>
+          </div>
 
           {selectedMachine && (
             <MachineDetails
@@ -100,7 +160,28 @@ function App() {
           )}
         </div>
       </div>
+
+      {openAdd && (
+        <div
+          style={{
+            position: "absolute",
+            right: 16,
+            top: 16,
+            width: 320,
+            maxHeight: 600,
+            overflow: "auto",
+            background: "#111",
+            border: "1px solid #333",
+            borderRadius: 12,
+            boxShadow: "0 4px 16px rgba(0,0,0,0.35)",
+            zIndex: 10,
+          }}
+        >
+          <AddMachinePanel selectedZone={selectedZone} onEnterPlaceMode={handleEnterPlaceMode} />
+        </div>
+      )}
     </div>
   );
 }
+
 export default App;

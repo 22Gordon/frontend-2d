@@ -1,8 +1,8 @@
 import React from "react";
-import "./Sidebar.css";      // mantém cores do painel escuro
-import "../styles/ui.css";   // estilos partilhados
+import "./Sidebar.css";
+import "../styles/ui.css";
 
-export default function Sidebar({ machines, selectedMachine, onSelectMachine }) {
+export default function Sidebar({ machines, selectedMachine, onSelectMachine, onAddMachine }) {
   return (
     <div className="sidebar">
       <div className="sidebar-header">
@@ -26,7 +26,11 @@ export default function Sidebar({ machines, selectedMachine, onSelectMachine }) 
         })}
       </div>
 
-      <button className="btn" style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>
+      <button
+        className="btn"
+        style={{ width: "100%", justifyContent: "center", marginTop: 12 }}
+        onClick={onAddMachine}
+      >
         + Add machine
       </button>
     </div>
