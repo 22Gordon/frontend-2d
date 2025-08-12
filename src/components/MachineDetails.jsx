@@ -1,5 +1,4 @@
 import React from "react";
-import layoutData from "../layout/layout.json";
 import "./MachineDetails.css";
 
 const LABELS = {
@@ -112,7 +111,6 @@ export default function MachineDetails({
   }
 
   // Dados OK
-  const zone = layoutData[machineId]?.zone || "N/A";
   const timestamp = data?.TimeInstant?.value || null;
 
   const excluded = new Set(["TimeInstant", "config", "device_info"]);
@@ -131,10 +129,6 @@ export default function MachineDetails({
   return (
     <div className="md-card">
       <h2 className="md-title">Machine {machineId}</h2>
-
-      <div className="md-zone">
-        <span className="md-zone-label">Zone:</span> {zone}
-      </div>
 
       <div className="md-grid">
         {entries.map(([key, attr]) => (

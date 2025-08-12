@@ -70,21 +70,25 @@ export function removeMachineFromLayout(zone, id) {
   return true;
 }
 
-// mover entre zonas (só efetivo para máquinas do overlay ou novas)
-// para as do layout base, isto cria na nova zona mas NÃO remove da antiga (precisa de “mask” – faço depois)
+// mover entre zonas (apenas overlay da origem, cria na nova)
 export function moveMachineToZone({ id, fromZone, toZone, x, y }) {
-  // se existir no overlay na zona antiga, apaga
   if (overlay[fromZone]?.machines?.[id]) {
     delete overlay[fromZone].machines[id];
   }
-  // adiciona na nova
   addMachineToLayout({ zone: toZone, id, x, y, status: "inactive" });
 }
 
-// atualizar posição (drag & drop futuro)
+// atualizar posição (se não existir no overlay, cria override)
 export function setMachinePosition({ zone, id, x, y }) {
-  if (!overlay[zone]?.machines?.[id]) return false;
-  overlay[zone].machines[id].position = { x, y };
+  overlay[zone] = overlay[zone] || { machines: {} };
+  overlay[zone].machines = overlay[zone].machines || {};
+  const existing = overlay[zone].machines[id];
+
+  if (!existing) {
+    overlay[zone].machines[id] = { position: { x, y }, status: "inactive" };
+  } else {
+    overlay[zone].machines[id].position = { x, y };
+  }
   saveOverlay(overlay);
   return true;
 }
