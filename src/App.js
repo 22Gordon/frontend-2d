@@ -61,6 +61,7 @@ function App() {
             selectedZone={selectedZone}
             onSelectMachine={handleSelectMachine}
             machineData={machineData}
+            selectedMachine={selectedMachine}
           />
           <div>
             {selectedMachine && (

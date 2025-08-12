@@ -1,0 +1,57 @@
+.md-card {
+  background: #f8f9fb;
+  border-radius: 12px;
+  padding: 20px;
+  width: 340px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  border: 1px solid #e5e7eb;
+  font-family: Inter, system-ui, Arial, sans-serif;
+  max-height: 560px;
+  overflow-y: auto;
+}
+
+.md-empty {
+  color: #6b7280;
+  margin: 0;
+}
+
+.md-title {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 0 0 12px 0;
+  color: #0f172a;
+}
+
+.md-zone {
+  margin-bottom: 12px;
+  color: #374151;
+}
+
+.md-zone-label {
+  font-weight: 700;
+  margin-right: 6px;
+}
+
+.md-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  column-gap: 16px;
+  row-gap: 8px;
+}
+
+.md-label {
+  color: #4b5563;
+  font-weight: 600;
+}
+
+.md-value {
+  color: #111827;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.md-updated {
+  margin-top: 14px;
+  font-size: 12px;
+  color: #6b7280;
+}

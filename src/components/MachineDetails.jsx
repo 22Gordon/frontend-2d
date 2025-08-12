@@ -1,8 +1,8 @@
 import React from "react";
 import layoutData from "../layout/layout.json";
+import "./MachineDetails.css";
 
-// Mapping for user-friendly attribute labels
-const readableLabels = {
+const LABELS = {
   Frequency: "Frequency",
   Frequency2: "Frequency 2",
   NeutralCurrent: "Neutral Current",
@@ -22,51 +22,80 @@ const readableLabels = {
   gasUsage: "Gas Usage",
 };
 
-function MachineDetails({ machineId, data }) {
-  if (!machineId || !data)
-    return <p style={{ paddingTop: 40 }}>Please select a machine.</p>;
+const UNITS = {
+  Frequency: "Hz",
+  Frequency2: "Hz",
+  Phase1Voltage: "V",
+  Phase2Voltage: "V",
+  Phase3Voltage: "V",
+  Phase1Current: "A",
+  Phase2Current: "A",
+  Phase3Current: "A",
+  TotalPower: "W",
+  TotalApparentPower: "VA",
+  TotalReactivePower: "var",
+  TotalActiveEnergy: "Wh",
+  TotalReactiveEnergy: "varh",
+  distance: "mm",
+  gasUsage: "",
+};
+
+function formatValue(key, v) {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "number") {
+    const n = Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(2);
+    return `${n}${UNITS[key] ? ` ${UNITS[key]}` : ""}`;
+  }
+  return String(v);
+}
+
+export default function MachineDetails({ machineId, data }) {
+  if (!machineId || !data) {
+    return (
+      <div className="md-card">
+        <p className="md-empty">Select a machine to view details.</p>
+      </div>
+    );
+  }
 
   const zone = layoutData[machineId]?.zone || "N/A";
   const timestamp = data?.TimeInstant?.value || null;
 
-  const excludedKeys = ["TimeInstant", "config", "device_info"];
+  const excluded = new Set(["TimeInstant", "config", "device_info"]);
+  const order = [
+    "TotalActiveEnergy","TotalApparentPower","TotalReactiveEnergy","TotalReactivePower",
+    "TotalPower","TotalPowerFactor",
+    "Phase1Voltage","Phase2Voltage","Phase3Voltage",
+    "Phase1Current","Phase2Current","Phase3Current",
+    "Frequency","Frequency2","gasUsage","distance"
+  ];
+
+  const entries = Object.entries(data)
+    .filter(([k, v]) => !excluded.has(k) && v?.value !== undefined)
+    .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]));
 
   return (
-    <div
-      style={{
-        background: "#f9f9f9",
-        borderRadius: 10,
-        padding: 30,
-        maxWidth: 300,
-        fontFamily: "Arial",
-      }}
-    >
-      <h2 style={{ marginBottom: 20 }}>Machine {machineId}</h2>
+    <div className="md-card">
+      <h2 className="md-title">Machine {machineId}</h2>
 
-      <p>
-        <strong>Zone:</strong> {zone}
-      </p>
+      <div className="md-zone">
+        <span className="md-zone-label">Zone:</span> {zone}
+      </div>
 
-      {Object.entries(data)
-        .filter(([key]) => !excludedKeys.includes(key))
-        .map(([key, attr]) => (
-          attr?.value !== undefined && (
-            <p key={key}>
-              <strong>{readableLabels[key] || key}:</strong>{" "}
-              {typeof attr.value === "object"
-                ? JSON.stringify(attr.value)
-                : attr.value.toString()}
-            </p>
-          )
+      <div className="md-grid">
+        {entries.map(([key, attr]) => (
+          <React.Fragment key={key}>
+            <div className="md-label">{LABELS[key] || key}</div>
+            <div className="md-value">{formatValue(key, attr.value)}</div>
+          </React.Fragment>
         ))}
+      </div>
 
       {timestamp && (
-        <p style={{ marginTop: 10, fontSize: 12, color: "#555" }}>
+        <div className="md-updated">
           Last updated: {new Date(timestamp).toLocaleString("en-GB")}
-        </p>
+        </div>
       )}
     </div>
   );
 }
-
-export default MachineDetails;
