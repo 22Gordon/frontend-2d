@@ -10,15 +10,11 @@
   overflow-y: auto;
 }
 
+/* título e vazios */
+.md-title { font-size: 22px; font-weight: 800; margin: 0 0 12px; color: #0f172a; }
 .md-empty { color: #6b7280; margin: 0; }
 
-.md-title {
-  font-size: 22px;
-  font-weight: 800;
-  margin: 0 0 12px 0;
-  color: #0f172a;
-}
-
+/* zona e grelha */
 .md-zone { margin-bottom: 12px; color: #374151; }
 .md-zone-label { font-weight: 700; margin-right: 6px; }
 
@@ -28,8 +24,43 @@
   column-gap: 16px;
   row-gap: 8px;
 }
-
 .md-label { color: #4b5563; font-weight: 600; }
 .md-value { color: #111827; text-align: right; font-variant-numeric: tabular-nums; }
 
 .md-updated { margin-top: 14px; font-size: 12px; color: #6b7280; }
+
+/* --- estados (loading/erro/sem dados) --- */
+.md-state {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 4px 12px rgba(0,0,0,.04);
+}
+.md-state--error {
+  border-left: 4px solid #dc2626;
+  background: #fff7f7;
+}
+.md-state-text { color: #374151; }
+
+.md-state-icon {
+  width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center;
+  color: #6b7280; font-weight: 800;
+}
+.md-state-icon--error { color: #dc2626; }
+
+/* spinner CSS fallback */
+.md-css-spinner {
+  width: 18px; height: 18px; display: inline-block;
+  border: 3px solid rgba(0,0,0,.15);
+  border-top-color: #1d4ed8;
+  border-radius: 50%;
+  animation: md-spin .9s linear infinite;
+}
+@keyframes md-spin { to { transform: rotate(360deg); } }
+
+/* botão de retry dentro do card de estado */
+.md-retry { margin-left: auto; }

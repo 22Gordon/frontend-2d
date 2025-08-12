@@ -41,3 +41,9 @@
 /* Icon button (lapis) */
 .icon-btn{ background:none; border:0; font-size:16px; color:inherit; cursor:pointer; opacity:.9; }
 .icon-btn:hover{ opacity:1; }
+
+.alert{
+  background:#fff7ed; color:#7c2d12; border:1px solid #fdba74;
+  padding:10px 12px; border-radius:10px; margin-bottom:12px;
+  display:flex; align-items:center; gap:10px; box-shadow: var(--shadow);
+}

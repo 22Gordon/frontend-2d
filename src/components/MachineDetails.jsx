@@ -49,8 +49,15 @@ function formatValue(key, v) {
   return String(v);
 }
 
-export default function MachineDetails({ machineId, data }) {
-  if (!machineId || !data) {
+export default function MachineDetails({
+  machineId,
+  data,
+  loading = false,
+  error = null,
+  onRetry,
+  Spinner, // opcional — se não vier, usamos o spinner CSS
+}) {
+  if (!machineId) {
     return (
       <div className="md-card">
         <p className="md-empty">Select a machine to view details.</p>
@@ -58,6 +65,53 @@ export default function MachineDetails({ machineId, data }) {
     );
   }
 
+  // Loading
+  if (loading) {
+    return (
+      <div className="md-card md-state">
+        <div className="md-state-icon">
+          {Spinner ? (
+            <Spinner size={18} />
+          ) : (
+            <span className="md-css-spinner" aria-label="Loading" />
+          )}
+        </div>
+        <div className="md-state-text">Loading data from Orion…</div>
+      </div>
+    );
+  }
+
+  // Error
+  if (error) {
+    return (
+      <div className="md-card md-state md-state--error">
+        <div className="md-state-icon md-state-icon--error">!</div>
+        <div className="md-state-text">Couldn’t load data: {error}</div>
+        {onRetry && (
+          <button className="btn btn--solid md-retry" onClick={onRetry}>
+            Try again
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Sem dados (mas sem erro)
+  if (!data) {
+    return (
+      <div className="md-card md-state">
+        <div className="md-state-icon">ℹ️</div>
+        <div className="md-state-text">No data yet.</div>
+        {onRetry && (
+          <button className="btn md-retry" onClick={onRetry}>
+            Refresh
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // Dados OK
   const zone = layoutData[machineId]?.zone || "N/A";
   const timestamp = data?.TimeInstant?.value || null;
 
