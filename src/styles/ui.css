@@ -1,0 +1,43 @@
+:root{
+  --bg-dark:#1e1e2f; --bg-card:#2a2a3a; --bg-muted:#e5e7eb;
+  --text:#111827; --text-inv:#fff; --primary:#1d4ed8; --teal:#00c2c2;
+  --border:#d1d5db; --shadow:0 4px 12px rgba(0,0,0,.08);
+}
+
+/* Botões base */
+.btn{
+  display:inline-flex; align-items:center; gap:8px;
+  padding:8px 14px; border-radius:10px; border:1px solid var(--border);
+  background:var(--bg-muted); color:var(--text); font-weight:600;
+  cursor:pointer; transition:transform .05s ease, background-color .2s ease, box-shadow .2s ease;
+}
+.btn:hover{ background:#dcdfe4; box-shadow:var(--shadow); }
+.btn:active{ transform:translateY(1px); }
+.btn--solid{ background:var(--primary); border-color:var(--primary); color:#fff; }
+.btn--ghost{ background:#2f2f40; border:0; color:#fff; }
+.btn--ghost:hover{ background:#3f3f50; }
+
+/* Chips (ZoneSelector) */
+.chipbar{ display:flex; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+.chip{
+  padding:8px 12px; border-radius:10px; border:1px solid var(--border);
+  background:var(--bg-muted); color:var(--text); font-weight:600; cursor:pointer;
+  transition:background-color .2s ease, transform .05s ease;
+}
+.chip:hover{ background:#dcdfe4; }
+.chip:active{ transform:translateY(1px); }
+.chip.is-active{ background:var(--primary); border-color:var(--primary); color:#fff; }
+
+/* Lista (Sidebar) */
+.list{ display:flex; flex-direction:column; gap:10px; }
+.list-item{
+  display:flex; justify-content:space-between; align-items:center;
+  padding:10px 12px; border-radius:10px; background:var(--bg-card); color:#fff;
+  border-left:4px solid transparent; cursor:pointer; transition:background .2s ease, box-shadow .2s ease;
+}
+.list-item:hover{ background:#3a3a4a; box-shadow:var(--shadow); }
+.list-item.selected{ background:var(--teal); color:#000; border-left-color:#007777; }
+
+/* Icon button (lapis) */
+.icon-btn{ background:none; border:0; font-size:16px; color:inherit; cursor:pointer; opacity:.9; }
+.icon-btn:hover{ opacity:1; }

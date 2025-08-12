@@ -9,6 +9,9 @@ function FactoryMap({ selectedZone, onSelectMachine, machineData, selectedMachin
   const backgroundImage = require(`../assets/${zoneData.image}`);
   const machines = zoneData.machines;
 
+  const baseW = zoneData.baseWidth || 800;
+  const baseH = zoneData.baseHeight || 600;
+
   return (
     <div
       className="factory-map"
@@ -17,8 +20,8 @@ function FactoryMap({ selectedZone, onSelectMachine, machineData, selectedMachin
         backgroundSize: "contain",
         backgroundRepeat: "no-repeat",
         backgroundPosition: "center",
-        width: "800px",
-        height: "600px",
+        width: "800px",   // desktop
+        height: "600px",  // desktop
         position: "relative",
         border: "1px solid #ccc",
         borderRadius: "10px",
@@ -40,15 +43,18 @@ function FactoryMap({ selectedZone, onSelectMachine, machineData, selectedMachin
           updated ? `Updated: ${new Date(updated).toLocaleString("en-GB")}` : null,
         ].filter(Boolean).join("\n");
 
+        // Converter posições px -> %
+        const topPct = (data.position.y / baseH) * 100;
+        const leftPct = (data.position.x / baseW) * 100;
+
         return (
           <div
             key={id}
             className={`machine ${status === "active" ? "active" : "inactive"} ${isSelected ? "selected" : ""}`}
             title={tooltipText}
             style={{
-              position: "absolute",
-              top: data.position.y,
-              left: data.position.x,
+              top: `${topPct}%`,
+              left: `${leftPct}%`,
               width: 30,
               height: 30,
               borderRadius: 20,
@@ -61,7 +67,8 @@ function FactoryMap({ selectedZone, onSelectMachine, machineData, selectedMachin
               cursor: "pointer",
               border: isSelected ? "3px solid #00bfff" : "none",
               boxShadow: isSelected ? "0 0 8px #00bfff" : "0 0 4px rgba(0,0,0,0.3)",
-              transform: isSelected ? "scale(1.1)" : "scale(1)",
+              transform: isSelected ? "translate(-50%, -50%) scale(1.1)" : "translate(-50%, -50%) scale(1)",
+              position: "absolute",
               zIndex: isSelected ? 2 : 1,
               transition: "all 0.2s ease-in-out",
             }}
@@ -72,7 +79,6 @@ function FactoryMap({ selectedZone, onSelectMachine, machineData, selectedMachin
         );
       })}
 
-      {/* Legenda */}
       <div className="map-legend">
         <span><div style={{ width: 12, height: 12, background: "green", borderRadius: "50%" }} /></span> Active
         <span style={{ marginLeft: 10 }}><div style={{ width: 12, height: 12, background: "red", borderRadius: "50%" }} /></span> Inactive

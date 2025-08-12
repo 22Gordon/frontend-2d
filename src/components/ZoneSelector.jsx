@@ -1,14 +1,14 @@
 import React from "react";
-import "./ZoneSelector.css";
+import "../styles/ui.css";
 
 export default function ZoneSelector({ selectedZone, onChangeZone }) {
-  const zones = ["A", "B", "C", "D", "E", "F"];
+  const zones = ["A","B","C","D","E","F"];
   return (
-    <div className="zone-bar">
-      {zones.map((z) => (
+    <div className="chipbar">
+      {zones.map(z => (
         <button
           key={z}
-          className={`zone-btn ${selectedZone === z ? "active" : ""}`}
+          className={`chip ${selectedZone === z ? "is-active" : ""}`}
           onClick={() => onChangeZone(z)}
         >
           Zona {z}

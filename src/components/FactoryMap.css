@@ -58,3 +58,13 @@
   gap: 6px;
   margin-right: 10px;
 }
+
+.factory-map { overflow: hidden; }
+
+.machine { 
+  transform-origin: center;
+}
+
+@media (max-width: 480px) {
+  .machine { width: 26px !important; height: 26px !important; font-size: 11px; }
+}

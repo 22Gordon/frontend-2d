@@ -6,6 +6,8 @@ import ZoneSelector from "./components/ZoneSelector";
 import Sidebar from "./components/Sidebar";
 import layoutData from "./layout/layout.json";
 import { getMachineDataFromOrion } from "./services/orionClient";
+import "./styles/ui.css";
+
 
 function App() {
   const [selectedMachine, setSelectedMachine] = useState(null);
@@ -38,31 +40,30 @@ function App() {
   const zoneMachines = layoutData[selectedZone]?.machines || {};
 
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div className="app-shell">
       <Sidebar
         machines={Object.keys(zoneMachines)}
         selectedMachine={selectedMachine}
         onSelectMachine={handleSelectMachine}
       />
 
-      <div style={{ flex: 1, padding: 30 }}>
+      <div className="app-main">
         <ZoneSelector selectedZone={selectedZone} onChangeZone={handleZoneChange} />
 
-        <div style={{ display: "flex", gap: 60 }}>
+        <div className="content-row">
           <FactoryMap
             selectedZone={selectedZone}
             onSelectMachine={handleSelectMachine}
             machineData={machineData}
-            selectedMachine={selectedMachine}  // <- necessário para o destaque
+            selectedMachine={selectedMachine} // necessário para o destaque
           />
-          <div>
-            {selectedMachine && (
-              <MachineDetails
-                machineId={selectedMachine}
-                data={machineData[selectedMachine] || null}
-              />
-            )}
-          </div>
+
+          {selectedMachine && (
+            <MachineDetails
+              machineId={selectedMachine}
+              data={machineData[selectedMachine] || null}
+            />
+          )}
         </div>
       </div>
     </div>
