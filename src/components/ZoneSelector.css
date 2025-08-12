@@ -1,0 +1,15 @@
+.zone-bar { display: flex; gap: 8px; margin-bottom: 16px; }
+
+.zone-btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #e5e7eb;
+  color: #111827;
+  cursor: pointer;
+  font-weight: 600;
+  transition: transform .05s ease, background-color .2s ease;
+}
+.zone-btn:hover { background: #dcdfe4; }
+.zone-btn:active { transform: translateY(1px); }
+.zone-btn.active { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }

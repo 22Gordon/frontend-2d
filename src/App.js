@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import './index.css';
+import "./index.css";
 import FactoryMap from "./components/FactoryMap";
 import MachineDetails from "./components/MachineDetails";
 import ZoneSelector from "./components/ZoneSelector";
@@ -14,9 +14,7 @@ function App() {
 
   const fetchAndSetMachineData = useCallback(async (machineId) => {
     const data = await getMachineDataFromOrion(machineId);
-    if (data) {
-      setMachineData((prev) => ({ ...prev, [machineId]: data }));
-    }
+    if (data) setMachineData((prev) => ({ ...prev, [machineId]: data }));
   }, []);
 
   const handleSelectMachine = (machineId) => {
@@ -27,11 +25,8 @@ function App() {
   useEffect(() => {
     const interval = setInterval(() => {
       const zoneMachines = layoutData[selectedZone]?.machines || {};
-      Object.keys(zoneMachines).forEach((id) => {
-        fetchAndSetMachineData(id);
-      });
+      Object.keys(zoneMachines).forEach(fetchAndSetMachineData);
     }, 5000);
-
     return () => clearInterval(interval);
   }, [selectedZone, fetchAndSetMachineData]);
 
@@ -51,17 +46,14 @@ function App() {
       />
 
       <div style={{ flex: 1, padding: 30 }}>
-        <ZoneSelector
-          selectedZone={selectedZone}
-          onChangeZone={handleZoneChange}
-        />
+        <ZoneSelector selectedZone={selectedZone} onChangeZone={handleZoneChange} />
 
         <div style={{ display: "flex", gap: 60 }}>
           <FactoryMap
             selectedZone={selectedZone}
             onSelectMachine={handleSelectMachine}
             machineData={machineData}
-            selectedMachine={selectedMachine}
+            selectedMachine={selectedMachine}  // <- necessário para o destaque
           />
           <div>
             {selectedMachine && (
@@ -76,5 +68,4 @@ function App() {
     </div>
   );
 }
-
 export default App;

@@ -2,7 +2,6 @@
   position: relative;
   width: 800px;
   height: 600px;
-  background-image: url("../assets/1.PNG");
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
@@ -14,7 +13,7 @@
   margin-bottom: 20px;
 }
 
-/* Máquina genérica */
+/* Machine */
 .machine {
   position: absolute;
   width: 40px;
@@ -31,16 +30,9 @@
   transition: all 0.2s ease-in-out;
 }
 
-/* Status */
-.machine.active {
-  background-color: green;
-}
+.machine.active { background-color: green; }
+.machine.inactive { background-color: red; }
 
-.machine.inactive {
-  background-color: red;
-}
-
-/* Máquina selecionada */
 .machine.selected {
   border: 3px solid #00bfff;
   transform: scale(1.1);
@@ -48,12 +40,6 @@
   box-shadow: 0 0 8px #00bfff;
 }
 
-/* Tooltip nativo (via title) */
-.machine:hover {
-  filter: brightness(1.1);
-}
-
-/* Legenda fixa */
 .map-legend {
   position: absolute;
   bottom: 10px;
@@ -67,8 +53,8 @@
 }
 
 .map-legend span {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  margin-bottom: 4px;
+  margin-right: 10px;
 }
