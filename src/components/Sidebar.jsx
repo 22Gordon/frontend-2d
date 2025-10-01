@@ -4,24 +4,23 @@ import "./Sidebar.css";
 import "../styles/ui.css";
 
 export default function Sidebar({
-  machines,             // array de IDs (ex.: ["311","312"] ou ["emeter-311", ...])
+  machines,
   selectedMachine,
   onSelectMachine,
   onAddMachine,
+  onMoveMachine,    // novo callback
+  onRemoveMachine,  // novo callback
 }) {
   const [query, setQuery] = useState("");
 
-  // normaliza para facilitar o match (aceita "312" e dá match em "emeter-312")
-  const norm = (id) => String(id).toLowerCase();
   const justNumber = (id) => String(id).match(/\d+/)?.[0] ?? "";
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (q === "") return machines;
-
     return machines.filter((id) => {
-      const full = norm(id);           // ex.: "emeter-312"
-      const num = justNumber(id);      // ex.: "312"
+      const full = id.toLowerCase();
+      const num = justNumber(id);
       return full.includes(q) || num.includes(q);
     });
   }, [machines, query]);
@@ -32,7 +31,7 @@ export default function Sidebar({
         <h2 className="sidebar-title">Adalberto</h2>
       </div>
 
-      {/* Filter by machine */}
+      {/* Filtro */}
       <div className="sidebar-filter">
         <label className="filter-label">Filter by machine</label>
         <input
@@ -54,7 +53,34 @@ export default function Sidebar({
               onClick={() => onSelectMachine(id)}
             >
               <span>{`Machine ${justNumber(id) || id}`}</span>
-              <button className="icon-btn" title="Edit">✏️</button>
+
+              <div className="actions">
+                {/* Botão mover */}
+                <button
+                  className="icon-btn"
+                  title="Move"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onMoveMachine?.(id);
+                  }}
+                >
+                  ✏️
+                </button>
+
+                {/* Botão remover */}
+                <button
+                  className="icon-btn"
+                  title="Remove"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (window.confirm(`Remove machine ${id}?`)) {
+                      onRemoveMachine?.(id);
+                    }
+                  }}
+                >
+                  🗑️
+                </button>
+              </div>
             </div>
           );
         })}

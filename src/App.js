@@ -15,7 +15,6 @@ import { getMachineDataFromOrion } from "./services/orionClient";
 import {
   getEffectiveLayout,
   addMachineToLayout,
-  exportEffectiveLayoutAsJson,
   setMachinePosition,
   removeMachineFromLayout,
   isOverlayMachine,
@@ -97,7 +96,7 @@ function App() {
     setOpenAdd(false);
   }
 
-  // <<<<< agora faz fetch imediato ao Orion para pintar o estado logo
+  // place -> cria e já faz fetch para pintar estado
   function handlePlace({ id, x, y, zone }) {
     addMachineToLayout({ zone, id, x, y, status: "inactive" });
     setPlacementCandidateId(null);
@@ -109,17 +108,40 @@ function App() {
     setMoveMode(false);
   }
 
-  function handleRemoveSelected() {
-    if (!selectedMachine) return;
-    const ok = window.confirm(`Remove machine ${selectedMachine} from zone ${selectedZone}?`);
-    if (!ok) return;
-    const removed = removeMachineFromLayout(selectedZone, selectedMachine);
-    if (!removed) {
-      alert("This machine comes from the base layout and can't be removed here.");
+  // ====== NOVO: mover/remover a partir da sidebar ======
+  function handleMoveMachine(id) {
+    setSelectedMachine(id);
+    setMoveMode(true);
+    setPlacementCandidateId(null);
+  }
+
+  function handleRemoveMachine(id) {
+    if (!isOverlayMachine(selectedZone, id)) {
+      alert("This machine is part of the base layout and cannot be removed here.");
+      return;
     }
-    setSelectedMachine(null);
+    const ok = window.confirm(`Remove machine ${id} from zone ${selectedZone}?`);
+    if (!ok) return;
+
+    const removed = removeMachineFromLayout(selectedZone, id);
+    if (!removed) return;
+
+    if (selectedMachine === id) setSelectedMachine(null);
     setMoveMode(false);
   }
+  // =====================================================
+
+  // Cancelar mover com ESC
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") {
+        setMoveMode(false);
+        setPlacementCandidateId(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className="app-shell">
@@ -128,6 +150,8 @@ function App() {
         selectedMachine={selectedMachine}
         onSelectMachine={handleSelectMachine}
         onAddMachine={() => setOpenAdd(true)}
+        onMoveMachine={handleMoveMachine}        // << ícone ✏️
+        onRemoveMachine={handleRemoveMachine}    // << ícone 🗑️
       />
 
       <div className="app-main">
@@ -135,12 +159,12 @@ function App() {
 
         {zoneErrors.length > 0 && (
           <div className="alert">
-            <strong>Orion:</strong> {zoneErrors.length} máquina(s) sem dados{" "}
+            <strong>Orion:</strong> {zoneErrors.length} machine(s) without data{" "}
             <button
               className="btn btn--solid"
               onClick={() => zoneErrors.forEach(fetchAndSetMachineData)}
             >
-              Tentar novamente
+              Retry
             </button>
           </div>
         )}
@@ -158,49 +182,12 @@ function App() {
               onRelocate={handleRelocate}
             />
 
-            <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-              <button className="btn btn--ghost" onClick={() => setOpenAdd(true)}>
-                Add machine…
-              </button>
-              <button className="btn" onClick={exportEffectiveLayoutAsJson}>
-                Export layout
-              </button>
-
-              {placementCandidateId && (
-                <button className="btn btn--ghost" onClick={() => setPlacementCandidateId(null)}>
-                  Cancel place
-                </button>
-              )}
-
-              {selectedMachine && (
-                <>
-                  <span style={{ marginLeft: 8, opacity: .6 }}>Selected: {selectedMachine}</span>
-
-                  {!moveMode ? (
-                    <button className="btn btn--ghost" onClick={() => { setMoveMode(true); setPlacementCandidateId(null); }}>
-                      Move (click on map)
-                    </button>
-                  ) : (
-                    <button className="btn btn--solid" onClick={() => setMoveMode(false)}>
-                      Cancel move
-                    </button>
-                  )}
-
-                  <button
-                    className="btn btn--ghost"
-                    onClick={handleRemoveSelected}
-                    disabled={!isOverlayMachine(selectedZone, selectedMachine)}
-                    title={
-                      isOverlayMachine(selectedZone, selectedMachine)
-                        ? "Remove from overlay"
-                        : "Locked (base layout)"
-                    }
-                  >
-                    Remove
-                  </button>
-                </>
-              )}
-            </div>
+            {/* ⛔️ BARRA DE BOTÕES REMOVIDA
+                - Add machine…
+                - Export layout
+                - Selected / Move / Cancel move
+                - Remove
+            */}
           </div>
 
           {selectedMachine && (
@@ -217,10 +204,7 @@ function App() {
       </div>
 
       <Modal open={openAdd} onClose={() => setOpenAdd(false)}>
-        <AddMachinePanel
-          selectedZone={selectedZone}
-          onEnterPlaceMode={handleEnterPlaceMode}
-        />
+        <AddMachinePanel selectedZone={selectedZone} onEnterPlaceMode={handleEnterPlaceMode} />
       </Modal>
     </div>
   );
