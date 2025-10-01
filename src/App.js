@@ -33,12 +33,14 @@ function App() {
   const [placementCandidateId, setPlacementCandidateId] = useState(null);
   const [moveMode, setMoveMode] = useState(false);
 
-  // CONFIRM REMOVE (novo)
+  // Confirm remove
   const [confirmRemoveId, setConfirmRemoveId] = useState(null);
 
-  // layout atual e máquinas da zona
-  const layout = getEffectiveLayout();
+  // ---- Layout em STATE (para forçar re-render na sidebar) ----
+  const [layout, setLayout] = useState(() => getEffectiveLayout());
+  const [layoutVersion, setLayoutVersion] = useState(0); // bump sempre que layout muda
   const zoneMachines = Object.keys(layout[selectedZone]?.machines || {});
+  // ------------------------------------------------------------
 
   // helpers de estado de pedidos
   const setLoading = (id, loading) =>
@@ -73,10 +75,12 @@ function App() {
     fetchAndSetMachineData(machineId);
   };
 
-  // Polling por zona
+  // Polling por zona + manter layout state sincronizado
   useEffect(() => {
     function tick() {
       const layoutNow = getEffectiveLayout();
+      setLayout(layoutNow);
+      setLayoutVersion((v) => v + 1); // força refresh da Sidebar quando overlay muda
       const ids = Object.keys(layoutNow[selectedZone]?.machines || {});
       ids.forEach(fetchAndSetMachineData);
     }
@@ -91,6 +95,8 @@ function App() {
     setMoveMode(false);
     setPlacementCandidateId(null);
     setConfirmRemoveId(null);
+    setLayout(getEffectiveLayout());
+    setLayoutVersion((v) => v + 1);
   };
 
   const zoneErrors = zoneMachines.filter((id) => reqState[id]?.error);
@@ -104,12 +110,16 @@ function App() {
   // place -> cria e já faz fetch para pintar estado
   function handlePlace({ id, x, y, zone }) {
     addMachineToLayout({ zone, id, x, y, status: "inactive" });
+    setLayout(getEffectiveLayout());       // atualiza sidebar imediatamente
+    setLayoutVersion((v) => v + 1);
     setPlacementCandidateId(null);
     fetchAndSetMachineData(id);
   }
 
   function handleRelocate({ id, x, y, zone }) {
     setMachinePosition({ zone, id, x, y });
+    setLayout(getEffectiveLayout());       // reflete posição se necessário (se lista exibir coords)
+    setLayoutVersion((v) => v + 1);
     setMoveMode(false);
   }
 
@@ -123,7 +133,6 @@ function App() {
   // Abre o modal de confirmação
   function handleRemoveMachine(id) {
     if (!isOverlayMachine(selectedZone, id)) {
-      // Opcional: trocar por toast/modal informativo
       alert("This machine is part of the base layout and cannot be removed here.");
       return;
     }
@@ -137,6 +146,8 @@ function App() {
     if (removed && selectedMachine === confirmRemoveId) {
       setSelectedMachine(null);
     }
+    setLayout(getEffectiveLayout());
+    setLayoutVersion((v) => v + 1);
     setMoveMode(false);
     setConfirmRemoveId(null);
   }
@@ -161,6 +172,7 @@ function App() {
   return (
     <div className="app-shell">
       <Sidebar
+        key={`sidebar-${selectedZone}-${layoutVersion}`}  // garante re-render a cada mudança
         machines={zoneMachines}
         selectedMachine={selectedMachine}
         onSelectMachine={handleSelectMachine}
@@ -221,7 +233,7 @@ function App() {
         title="Remove machine"
         message={
           confirmRemoveId
-            ? `Are you sure you want to remove machine ${confirmRemoveId} from Zone ${selectedZone}?`
+            ? `Are you sure you want to remove <strong>Machine ${confirmRemoveId}</strong> from Zone ${selectedZone}?`
             : ""
         }
         confirmText="Remove"

@@ -39,3 +39,19 @@
 .icon-btn:hover {
   opacity: 0.7;
 }
+
+/* Sidebar.css — acrescenta */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: calc(100vh - 220px); /* ajusta ao teu layout */
+  overflow-y: auto;
+  padding-right: 4px; /* espaço para a scrollbar */
+}
+
+/* (opcional) destaca o selecionado */
+.list-item.selected {
+  background: rgba(255,255,255,0.12);
+}
+
