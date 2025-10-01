@@ -10,6 +10,7 @@ import Sidebar from "./components/Sidebar";
 import Spinner from "./components/Spinner";
 import AddMachinePanel from "./components/AddMachinePanel";
 import Modal from "./components/Modal";
+import ConfirmDialog from "./components/ConfirmDialog";
 
 import { getMachineDataFromOrion } from "./services/orionClient";
 import {
@@ -31,6 +32,9 @@ function App() {
   const [openAdd, setOpenAdd] = useState(false);
   const [placementCandidateId, setPlacementCandidateId] = useState(null);
   const [moveMode, setMoveMode] = useState(false);
+
+  // CONFIRM REMOVE (novo)
+  const [confirmRemoveId, setConfirmRemoveId] = useState(null);
 
   // layout atual e máquinas da zona
   const layout = getEffectiveLayout();
@@ -86,6 +90,7 @@ function App() {
     setSelectedMachine(null);
     setMoveMode(false);
     setPlacementCandidateId(null);
+    setConfirmRemoveId(null);
   };
 
   const zoneErrors = zoneMachines.filter((id) => reqState[id]?.error);
@@ -108,26 +113,36 @@ function App() {
     setMoveMode(false);
   }
 
-  // ====== NOVO: mover/remover a partir da sidebar ======
+  // ====== Mover/Remover a partir da sidebar ======
   function handleMoveMachine(id) {
     setSelectedMachine(id);
     setMoveMode(true);
     setPlacementCandidateId(null);
   }
 
+  // Abre o modal de confirmação
   function handleRemoveMachine(id) {
     if (!isOverlayMachine(selectedZone, id)) {
+      // Opcional: trocar por toast/modal informativo
       alert("This machine is part of the base layout and cannot be removed here.");
       return;
     }
-    const ok = window.confirm(`Remove machine ${id} from zone ${selectedZone}?`);
-    if (!ok) return;
+    setConfirmRemoveId(id);
+  }
 
-    const removed = removeMachineFromLayout(selectedZone, id);
-    if (!removed) return;
-
-    if (selectedMachine === id) setSelectedMachine(null);
+  // Confirma remoção (executa)
+  function confirmRemove() {
+    if (!confirmRemoveId) return;
+    const removed = removeMachineFromLayout(selectedZone, confirmRemoveId);
+    if (removed && selectedMachine === confirmRemoveId) {
+      setSelectedMachine(null);
+    }
     setMoveMode(false);
+    setConfirmRemoveId(null);
+  }
+
+  function cancelRemove() {
+    setConfirmRemoveId(null);
   }
   // =====================================================
 
@@ -150,8 +165,8 @@ function App() {
         selectedMachine={selectedMachine}
         onSelectMachine={handleSelectMachine}
         onAddMachine={() => setOpenAdd(true)}
-        onMoveMachine={handleMoveMachine}        // << ícone ✏️
-        onRemoveMachine={handleRemoveMachine}    // << ícone 🗑️
+        onMoveMachine={handleMoveMachine}        // ✏️
+        onRemoveMachine={handleRemoveMachine}    // 🗑️ abre modal
       />
 
       <div className="app-main">
@@ -181,13 +196,6 @@ function App() {
               relocateCandidateId={moveMode ? selectedMachine : null}
               onRelocate={handleRelocate}
             />
-
-            {/* ⛔️ BARRA DE BOTÕES REMOVIDA
-                - Add machine…
-                - Export layout
-                - Selected / Move / Cancel move
-                - Remove
-            */}
           </div>
 
           {selectedMachine && (
@@ -206,6 +214,22 @@ function App() {
       <Modal open={openAdd} onClose={() => setOpenAdd(false)}>
         <AddMachinePanel selectedZone={selectedZone} onEnterPlaceMode={handleEnterPlaceMode} />
       </Modal>
+
+      {/* Confirm remove */}
+      <ConfirmDialog
+        open={!!confirmRemoveId}
+        title="Remove machine"
+        message={
+          confirmRemoveId
+            ? `Are you sure you want to remove machine ${confirmRemoveId} from Zone ${selectedZone}?`
+            : ""
+        }
+        confirmText="Remove"
+        cancelText="Cancel"
+        tone="danger"
+        onConfirm={confirmRemove}
+        onCancel={cancelRemove}
+      />
     </div>
   );
 }

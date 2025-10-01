@@ -73,9 +73,7 @@ export default function Sidebar({
                   title="Remove"
                   onClick={(e) => {
                     e.stopPropagation();
-                    if (window.confirm(`Remove machine ${id}?`)) {
-                      onRemoveMachine?.(id);
-                    }
+                    onRemoveMachine?.(id);
                   }}
                 >
                   🗑️
