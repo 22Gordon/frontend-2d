@@ -50,8 +50,4 @@
   padding-right: 4px; /* espaço para a scrollbar */
 }
 
-/* (opcional) destaca o selecionado */
-.list-item.selected {
-  background: rgba(255,255,255,0.12);
-}
 
