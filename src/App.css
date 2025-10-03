@@ -1,38 +1,63 @@
-.App {
-  text-align: center;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
+/* === Fundo + grid principal === */
+.app-shell {
   min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  background:
+    radial-gradient(1200px 400px at 140px 120px, rgba(62,130,255,.08), transparent 70%),
+    linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 24px;
+  overflow-x: hidden;
 }
 
-.App-link {
-  color: #61dafb;
+.app-main{
+  padding:20px;
+  overflow-x: hidden; /* safety */
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+/* Mapa + Details */
+.content-row{
+  display:grid;
+  grid-template-columns: minmax(0, 1fr) minmax(350px, 350px);
+  gap:24px;
+  align-items:start;
 }
+
+/* Responsivo */
+@media (max-width: 1200px){
+  .content-row{ grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 900px){
+  .app-shell{ grid-template-columns: 1fr; }
+}
+
+/* === Anti-overflow global === */
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #root { overflow-x: hidden; }
+
+/* === Proteções específicas === */
+.map-wrap{
+  max-width: 100%;
+  overflow: hidden;               /* corta halos/sombras do card do mapa */
+}
+
+/* se tiveres um card do mapa com borda/raio, garante largura plena */
+.factory-card, .map-card{
+  width:100%;
+  max-width:100%;
+}
+
+/* legenda no rodapé do mapa (se usares) */
+.legend{
+  position: sticky; bottom: 12px;
+  display:inline-flex; align-items:center; gap:14px;
+  background:#fff; border:1px solid #e6e8ef; border-radius:999px;
+  padding:8px 12px; box-shadow:0 8px 18px rgba(0,0,0,.08);
+  font-size:14px;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+}
+.legend .dot{ width:10px; height:10px; border-radius:50%; display:inline-block; }
+.legend .dot.active{ background:#22c55e; }
+.legend .dot.inactive{ background:#f59e0b; }
+.legend .dot.selected{ background:#3e82ff; }

@@ -1,5 +1,5 @@
 import React from "react";
-import "../styles/ui.css";
+import "./ZoneSelector.css";
 
 export default function ZoneSelector({ selectedZone, onChangeZone }) {
   const zones = ["A","B","C","D","E","F"];

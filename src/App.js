@@ -1,7 +1,7 @@
-// src/App.js
 import React, { useState, useEffect, useCallback } from "react";
 import "./index.css";
 import "./styles/ui.css";
+import "./App.css";
 
 import FactoryMap from "./components/FactoryMap";
 import MachineDetails from "./components/MachineDetails";
@@ -185,14 +185,21 @@ function App() {
         <ZoneSelector selectedZone={selectedZone} onChangeZone={handleZoneChange} />
 
         {zoneErrors.length > 0 && (
-          <div className="alert">
-            <strong>Orion:</strong> {zoneErrors.length} machine(s) without data{" "}
-            <button
-              className="btn btn--solid"
-              onClick={() => zoneErrors.forEach(fetchAndSetMachineData)}
-            >
-              Retry
-            </button>
+          <div className="alert alert--info" role="status" aria-live="polite">
+            <div className="alert__content">
+              <span className="alert__icon" aria-hidden>⚠️</span>
+              <span className="alert__text">
+                <strong>Orion:</strong> {zoneErrors.length} machine(s) without data
+              </span>
+            </div>
+            <div className="alert__actions">
+              <button
+                className="btn btn--solid btn--sm"
+                onClick={() => zoneErrors.forEach(fetchAndSetMachineData)}
+              >
+                Retry
+              </button>
+            </div>
           </div>
         )}
 

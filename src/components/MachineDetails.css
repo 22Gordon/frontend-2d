@@ -1,66 +1,53 @@
-.md-card {
-  background: #f8f9fb;
-  border-radius: 12px;
-  padding: 20px;
-  width: 340px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
-  border: 1px solid #e5e7eb;
-  font-family: Inter, system-ui, Arial, sans-serif;
-  max-height: 560px;
-  overflow-y: auto;
+/* ===== tamanhos ===== */
+.md-card{
+  background:#f8f9fb;
+  border-radius:12px;
+  padding:16px;
+  width:300px;                /* tamanho base mais pequeno */
+  max-width:100%;
+  box-shadow:0 4px 14px rgba(0,0,0,.06);
+  border:1px solid #e5e7eb;
+  font-family:Inter, system-ui, Arial, sans-serif;
+  max-height: calc(100vh - 48px); /* cabe no ecrã sem scroll da página */
+  overflow-y:auto;               /* se for preciso, rola só dentro do card */
 }
 
-/* título e vazios */
-.md-title { font-size: 22px; font-weight: 800; margin: 0 0 12px; color: #0f172a; }
-.md-empty { color: #6b7280; margin: 0; }
+/* variantes de tamanho */
+.md--compact{ width: 300px; font-size: 14px; }
+.md--xcompact{ width: 280px; font-size: 13px; }
 
-/* zona e grelha */
-.md-zone { margin-bottom: 12px; color: #374151; }
-.md-zone-label { font-weight: 700; margin-right: 6px; }
+/* posicionamento */
+.md--sticky{ position: sticky; top: 16px; }
+.md--centered{ align-self: center; }  /* centra verticalmente na coluna */
 
-.md-grid {
-  display: grid;
+/* tipografia/linhas */
+.md-title{ font-size:18px; font-weight:800; margin:0 0 8px; color:#0f172a; }
+
+.md-grid{
+  display:grid;
   grid-template-columns: 1fr auto;
-  column-gap: 16px;
-  row-gap: 8px;
+  column-gap:12px;
+  row-gap:6px;
 }
-.md-label { color: #4b5563; font-weight: 600; }
-.md-value { color: #111827; text-align: right; font-variant-numeric: tabular-nums; }
+.md-label{ color:#4b5563; font-weight:600; padding:2px 0; border-bottom:1px dashed #e6e7eb; }
+.md-value{ color:#0f172a; text-align:right; font-variant-numeric:tabular-nums; padding:2px 0; border-bottom:1px dashed #e6e7eb; }
 
-.md-updated { margin-top: 14px; font-size: 12px; color: #6b7280; }
+/* remover linha da última row */
+.md-grid > .md-label:last-of-type,
+.md-grid > .md-value:last-of-type{ border-bottom:none; }
 
-/* --- estados (loading/erro/sem dados) --- */
-.md-state {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 14px;
-  border-radius: 10px;
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 4px 12px rgba(0,0,0,.04);
+.md-updated{ margin-top:10px; font-size:11px; color:#6b7280; }
+
+/* estados */
+.md-state{
+  display:flex; align-items:center; gap:8px;
+  padding:12px; border-radius:10px; background:#fff;
+  border:1px solid #e5e7eb; box-shadow:0 4px 12px rgba(0,0,0,.04);
 }
-.md-state--error {
-  border-left: 4px solid #dc2626;
-  background: #fff7f7;
-}
-.md-state-text { color: #374151; }
-
-.md-state-icon {
-  width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center;
-  color: #6b7280; font-weight: 800;
-}
-.md-state-icon--error { color: #dc2626; }
-
-/* spinner CSS fallback */
-.md-css-spinner {
-  width: 18px; height: 18px; display: inline-block;
-  border: 3px solid rgba(0,0,0,.15);
-  border-top-color: #1d4ed8;
-  border-radius: 50%;
-  animation: md-spin .9s linear infinite;
-}
-@keyframes md-spin { to { transform: rotate(360deg); } }
-
-/* botão de retry dentro do card de estado */
-.md-retry { margin-left: auto; }
+.md-state--error{ border-left:4px solid #dc2626; background:#fff7f7; }
+.md-state-text{ color:#374151; }
+.md-state-icon{ width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; color:#6b7280; font-weight:800; }
+.md-state-icon--error{ color:#dc2626; }
+@keyframes md-spin{ to{ transform:rotate(360deg);} }
+.md-css-spinner{ width:16px; height:16px; border:3px solid rgba(0,0,0,.15); border-top-color:#1d4ed8; border-radius:50%; animation:md-spin .9s linear infinite; }
+.md-retry{ margin-left:auto; }

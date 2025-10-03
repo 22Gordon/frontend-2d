@@ -1,0 +1,40 @@
+/* barra de zonas */
+.chipbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin: 10px 0 16px;
+  flex-wrap: wrap;
+}
+
+/* chip normal */
+.chip {
+  border: 1px solid #e6e8ef;
+  background: #f7f9ff;
+  color: #0f172a;
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, box-shadow .12s, color .12s;
+  outline: none;
+}
+
+/* hover */
+.chip:hover {
+  background: #eef3ff;
+  border-color: #d9e2ff;
+}
+
+/* foco teclado */
+.chip:focus-visible {
+  box-shadow: 0 0 0 3px rgba(62,130,255,.25);
+}
+
+/* ativo */
+.chip.is-active {
+  background: #3e82ff;
+  color: #fff;
+  border-color: #3e82ff;
+  box-shadow: 0 6px 16px rgba(62,130,255,.35);
+}
