@@ -1,15 +1,14 @@
 // Sidebar.jsx
 import React, { useMemo, useState } from "react";
 import "./Sidebar.css";
-import "../styles/ui.css";
 
 export default function Sidebar({
   machines,
   selectedMachine,
   onSelectMachine,
   onAddMachine,
-  onMoveMachine,    // novo callback
-  onRemoveMachine,  // novo callback
+  onMoveMachine,
+  onRemoveMachine,
 }) {
   const [query, setQuery] = useState("");
 
@@ -17,64 +16,67 @@ export default function Sidebar({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (q === "") return machines;
+    if (!q) return machines;
     return machines.filter((id) => {
-      const full = id.toLowerCase();
+      const full = String(id).toLowerCase();
       const num = justNumber(id);
       return full.includes(q) || num.includes(q);
     });
   }, [machines, query]);
 
   return (
-    <div className="sidebar">
+    <aside className="sidebar">
+      {/* Header */}
       <div className="sidebar-header">
         <h2 className="sidebar-title">Adalberto</h2>
       </div>
 
-      {/* Filtro */}
+      {/* Search */}
       <div className="sidebar-filter">
         <label className="filter-label">Filter by machine</label>
-        <input
-          className="input"
-          type="text"
-          placeholder="e.g., 312"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
+        <div className="input-wrap">
+          <span className="search-ico" aria-hidden>🔎</span>
+          <input
+            className="input"
+            type="text"
+            placeholder="e.g., 312"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Filter machines"
+          />
+        </div>
       </div>
 
+      {/* List */}
       <div className="list">
         {filtered.map((id) => {
           const isSel = selectedMachine === id;
+
           return (
             <div
               key={id}
               className={`list-item ${isSel ? "selected" : ""}`}
-              onClick={() => onSelectMachine(id)}
+              onClick={() => onSelectMachine?.(id)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => e.key === "Enter" && onSelectMachine?.(id)}
             >
-              <span>{`Machine ${justNumber(id) || id}`}</span>
+              <span className="item-label">{`Machine ${justNumber(id) || id}`}</span>
 
               <div className="actions">
-                {/* Botão mover */}
                 <button
                   className="icon-btn"
                   title="Move"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onMoveMachine?.(id);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); onMoveMachine?.(id); }}
+                  aria-label={`Move ${id}`}
                 >
                   ✏️
                 </button>
-
-                {/* Botão remover */}
                 <button
                   className="icon-btn"
                   title="Remove"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveMachine?.(id);
-                  }}
+                  onClick={(e) => { e.stopPropagation(); onRemoveMachine?.(id); }}
+                  aria-label={`Remove ${id}`}
                 >
                   🗑️
                 </button>
@@ -82,15 +84,11 @@ export default function Sidebar({
             </div>
           );
         })}
+        {filtered.length === 0 && <div className="empty">No machines found.</div>}
       </div>
 
-      <button
-        className="btn"
-        style={{ width: "100%", justifyContent: "center", marginTop: 12 }}
-        onClick={onAddMachine}
-      >
-        + Add machine
-      </button>
-    </div>
+      {/* Add */}
+      <button className="btn" onClick={onAddMachine}>+ Add machine</button>
+    </aside>
   );
 }
