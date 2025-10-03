@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { fetchOrionMachineIds } from "../services/orion";
 import { getEffectiveLayout, listLayoutMachineIds } from "../utils/layoutStore";
+import "./AddMachinePanel.css";
 
 export default function AddMachinePanel({ selectedZone, onEnterPlaceMode }) {
   const [loading, setLoading] = useState(false);
@@ -49,55 +50,36 @@ export default function AddMachinePanel({ selectedZone, onEnterPlaceMode }) {
   const [fromOrion, fromLayoutOnly] = useMemo(() => {
     const set = new Set(orionIds);
     const a = [], b = [];
-    for (const id of filtered) {
-      (set.has(id) ? a : b).push(id);
-    }
-    return [
-      a.sort((x, y) => Number(x) - Number(y)),
-      b.sort((x, y) => Number(x) - Number(y)),
-    ];
+    for (const id of filtered) (set.has(id) ? a : b).push(id);
+    const ascNum = (x, y) => Number(x) - Number(y);
+    return [a.sort(ascNum), b.sort(ascNum)];
   }, [filtered, orionIds]);
 
   return (
-    <div style={{ padding: 12, minWidth: 360, color: "#111" }}>
-      <div
-        style={{
-          position: "sticky",
-          top: 0,
-          background: "#fff",
-          paddingBottom: 8,
-          zIndex: 1,
-          borderBottom: "1px solid #eee",
-        }}
-      >
-        <h3 style={{ margin: "0 0 8px 0", color: "#111" }}>
-          Add machine to zone {selectedZone}
-        </h3>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search ID…"
-          style={{
-            width: "100%",
-            padding: "10px 12px",
-            borderRadius: 8,
-            border: "1px solid #dcdcdc",
-            background: "#fff",
-            color: "#111",
-            outline: "none",
-          }}
-        />
+    <div className="amp">
+      <div className="amp-header">
+        <h3 className="amp-title">Add machine to zone {selectedZone}</h3>
+        <div className="amp-search">
+          <span className="amp-search-ico" aria-hidden>🔎</span>
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search ID…"
+            className="amp-input"
+            aria-label="Search machine ID"
+          />
+        </div>
       </div>
 
-      {loading && <div style={{ padding: 8 }}>Loading…</div>}
-      {err && <div style={{ color: "tomato", padding: 8 }}>Error: {err}</div>}
+      {loading && <div className="amp-state">Loading…</div>}
+      {err && <div className="amp-state amp-error">Error: {err}</div>}
 
       {!loading && !err && (
         <>
           {fromOrion.length === 0 && fromLayoutOnly.length === 0 ? (
-            <div style={{ padding: 8 }}>No machines available for this zone.</div>
+            <div className="amp-state">No machines available for this zone.</div>
           ) : (
-            <div style={{ display: "grid", gap: 12 }}>
+            <div className="amp-sections">
               {fromOrion.length > 0 && (
                 <Section
                   title={`From Orion (${fromOrion.length})`}
@@ -124,55 +106,28 @@ export default function AddMachinePanel({ selectedZone, onEnterPlaceMode }) {
 
 function Section({ title, items, badge, onEnterPlaceMode }) {
   return (
-    <div>
-      <div style={{ fontSize: 12, color: "#666", margin: "6px 0 4px" }}>{title}</div>
-      <ul
-        style={{
-          listStyle: "none",
-          padding: 0,
-          margin: 0,
-          border: "1px solid #eee",
-          borderRadius: 10,
-          overflow: "hidden",
-          background: "#fafafa",
-        }}
-      >
+    <section className="amp-section">
+      <div className="amp-section-title">{title}</div>
+      <ul className="amp-list">
         {items.map((id, i) => (
           <li
             key={id}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              padding: "10px 12px",
-              borderBottom: i === items.length - 1 ? "none" : "1px solid #f2f2f2",
-            }}
+            className="amp-item"
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontWeight: 600 }}>Machine {id}</span>
-              <span
-                style={{
-                  fontSize: 11,
-                  padding: "2px 6px",
-                  borderRadius: 999,
-                  border: "1px solid #e5e5e5",
-                  background: "#fff",
-                  color: "#444",
-                }}
-              >
-                {badge}
-              </span>
+            <div className="amp-left">
+              <span className="amp-machine">Machine {id}</span>
+              <span className="amp-badge">{badge}</span>
             </div>
             <button
-              className="btn"
+              className="amp-btn"
               onClick={() => onEnterPlaceMode(id)}
-              title="Click and then pick a position on the map"
+              aria-label={`Place machine ${id} on map`}
             >
               Place on map
             </button>
           </li>
         ))}
       </ul>
-    </div>
+    </section>
   );
 }
