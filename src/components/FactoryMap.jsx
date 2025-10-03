@@ -1,27 +1,29 @@
 // FactoryMap.jsx
 import React, { useRef } from "react";
 import { getEffectiveLayout } from "../utils/layoutStore";
-import "../components/FactoryMap.css";
+import "./FactoryMap.css";
+import { Cog } from "lucide-react"; // um único ícone para todos
 
 // Deriva estado "active/inactive" a partir dos dados do Orion
 function deriveStatus(info, fallback = "inactive") {
   if (!info) return fallback;
   const num = (v) => (v == null ? NaN : Number(v));
 
-  //
-  const p = num(info?.TotalPower?.value);            // W
-  if (!Number.isNaN(p) && p > 50) return "active";   // >50 W => active
+  const p = num(info?.TotalPower?.value);           // W
+  if (!Number.isNaN(p) && p > 50) return "active";  // >50 W => active
 
   const i1 = num(info?.Phase1Current?.value);
   const i2 = num(info?.Phase2Current?.value);
   const i3 = num(info?.Phase3Current?.value);
-  const anyI = [i1, i2, i3].some((i) => !Number.isNaN(i) && i > 0.5); // >0.5 A
+  const anyI = [i1, i2, i3].some((i) => !Number.isNaN(i) && i > 0.5);
   if (anyI) return "active";
 
   return fallback;
 }
 
-function FactoryMap({
+const justNumber = (id) => String(id).match(/\d+/)?.[0] ?? id;
+
+export default function FactoryMap({
   selectedZone,
   onSelectMachine,
   machineData,
@@ -31,10 +33,8 @@ function FactoryMap({
   relocateCandidateId,    // mover existente
   onRelocate,             // ({ id, x, y, zone })
 }) {
-  // Hooks SEMPRE antes de qualquer return condicional
   const containerRef = useRef(null);
 
-  // usar layout efetivo (json + overlay)
   const layoutData = getEffectiveLayout();
   const zoneData = layoutData[selectedZone];
   if (!zoneData) return <p>Zone not found.</p>;
@@ -94,7 +94,6 @@ function FactoryMap({
     >
       {Object.entries(machines).map(([id, data]) => {
         const info = machineData[id];
-        // <<< estado agora derivado do Orion (com fallback do layout/overlay)
         const status = deriveStatus(info, data.status || "inactive");
         const isSelected = selectedMachine === id;
 
@@ -115,47 +114,30 @@ function FactoryMap({
         return (
           <div
             key={id}
-            className={`machine ${status === "active" ? "active" : "inactive"} ${isSelected ? "selected" : ""}`}
+            className={`machine ${status} ${isSelected ? "selected" : ""}`}
             title={tooltipText}
-            style={{
-              top: `${topPct}%`,
-              left: `${leftPct}%`,
-              width: 30,
-              height: 30,
-              borderRadius: 20,
-              backgroundColor: status === "active" ? "green" : "red",
-              color: "#fff",
-              fontSize: 12,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              border: isSelected ? "3px solid #00bfff" : "none",
-              boxShadow: isSelected ? "0 0 8px #00bfff" : "0 0 4px rgba(0,0,0,0.3)",
-              transform: isSelected ? "translate(-50%, -50%) scale(1.1)" : "translate(-50%, -50%) scale(1)",
-              position: "absolute",
-              zIndex: isSelected ? 2 : 1,
-              transition: "all 0.2s ease-in-out",
-            }}
+            style={{ top: `${topPct}%`, left: `${leftPct}%` }}
             onClick={(ev) => {
-              ev.stopPropagation(); // não dispare o place/move
+              ev.stopPropagation();
               onSelectMachine(id);
             }}
           >
-            {id}
+            <div className="machine-tile">
+              <Cog className="machine-icon" />
+            </div>
+            <span className="machine-num">{justNumber(id)}</span>
           </div>
         );
       })}
 
+      {/* Legenda fixa no canto inferior-esquerdo */}
       <div className="map-legend">
-        <span><div style={{ width: 12, height: 12, background: "green", borderRadius: "50%" }} /></span> Active
-        <span style={{ marginLeft: 10 }}><div style={{ width: 12, height: 12, background: "red", borderRadius: "50%" }} /></span> Inactive
-        <span style={{ marginLeft: 10 }}><div style={{ width: 12, height: 12, border: "2px solid #00bfff", borderRadius: "50%" }} /></span> Selected
-        {placing && <span style={{ marginLeft: 10 }}>• Placing: {placementCandidateId}</span>}
-        {relocating && <span style={{ marginLeft: 10 }}>• Moving: {relocateCandidateId}</span>}
+        <span><div className="legend-dot legend-active" /> Active</span>
+        <span><div className="legend-dot legend-inactive" /> Inactive</span>
+        <span><div className="legend-dot legend-selected" /> Selected</span>
+        {placing && <span>• Placing: {placementCandidateId}</span>}
+        {relocating && <span>• Moving: {relocateCandidateId}</span>}
       </div>
     </div>
   );
 }
-
-export default FactoryMap;

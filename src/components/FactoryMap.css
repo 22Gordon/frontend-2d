@@ -1,70 +1,47 @@
-.factory-map {
-  position: relative;
-  width: 800px;
-  height: 600px;
-  background-size: contain;
-  background-repeat: no-repeat;
-  background-position: center;
-  border-radius: 12px;
-  background-color: #f9f9f9;
-  border: 1px solid #ccc;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  overflow: hidden;
-  margin-bottom: 20px;
+/* === Marcadores no formato tile + número por baixo === */
+.machine{
+  position:absolute;
+  transform:translate(-50%, -50%);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; z-index:1;
+}
+.machine .machine-tile{
+  width:28px; height:28px; border-radius:6px;
+  display:inline-flex; align-items:center; justify-content:center;
+  color:#fff; box-shadow:0 10px 22px rgba(2,6,23,.22);
+  transition:transform .15s ease, box-shadow .15s ease, outline .15s ease;
+}
+.machine .machine-icon{ width:14px; height:14px; stroke-width:2; color:#fff; }
+
+.machine .machine-num{
+  position:absolute; top:calc(100% + 3px); left:50%; transform:translateX(-50%);
+  font-size:12px; font-weight:700; color:#0f172a; text-shadow:0 1px 0 rgba(255,255,255,.6);
 }
 
-/* Machine */
-.machine {
-  position: absolute;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: bold;
-  color: white;
-  box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
-  transition: all 0.2s ease-in-out;
+/* cores por estado */
+.machine.active   .machine-tile{ background:#2e7d32; }   /* verde */
+.machine.inactive .machine-tile{ background:#f59e0b; color:#111; } /* laranja */
+
+/* hover/seleção */
+.machine:hover .machine-tile{
+  transform:scale(1.06); box-shadow:0 14px 28px rgba(2,6,23,.28);
+}
+.machine.selected .machine-tile{
+  outline:3px solid #22d3ee; outline-offset:0;
+  box-shadow:0 0 0 5px rgba(34,211,238,.18), 0 18px 42px rgba(2,6,23,.35);
+  transform:scale(1.1);
 }
 
-.machine.active { background-color: green; }
-.machine.inactive { background-color: red; }
-
-.machine.selected {
-  border: 3px solid #00bfff;
-  transform: scale(1.1);
-  z-index: 2;
-  box-shadow: 0 0 8px #00bfff;
+/* === Legenda fixa no canto inferior-esquerdo === */
+.map-legend{
+  position:absolute; left:12px; bottom:12px;
+  display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  background:rgba(255,255,255,.95); border:1px solid #e7eaf0;
+  border-radius:12px; padding:.45rem .6rem; font-size:.9rem;
+  box-shadow:0 10px 22px rgba(2,6,23,.12);
 }
-
-.map-legend {
-  position: absolute;
-  bottom: 10px;
-  left: 10px;
-  background-color: rgba(255, 255, 255, 0.9);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 12px;
-  color: #333;
-  box-shadow: 0 0 4px rgba(0,0,0,0.1);
-}
-
-.map-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-right: 10px;
-}
-
-.factory-map { overflow: hidden; }
-
-.machine { 
-  transform-origin: center;
-}
-
-@media (max-width: 480px) {
-  .machine { width: 26px !important; height: 26px !important; font-size: 11px; }
-}
+.map-legend span{ display:inline-flex; align-items:center; gap:6px; }
+.legend-dot{ width:12px; height:12px; border-radius:4px; }
+.legend-active{ background:#2e7d32; }
+.legend-inactive{ background:#f59e0b; }
+.legend-selected{ width:12px; height:12px; border-radius:50%; border:2px solid #00bfff; background:transparent; }
