@@ -1,16 +1,21 @@
 // FactoryMap.jsx
 import React, { useRef } from "react";
-import { getEffectiveLayout } from "../utils/layoutStore";
+import {
+  getEffectiveLayout,
+  removeZone,
+  isRemovableZone,
+  listZones
+} from "../utils/layoutStore";
 import "./FactoryMap.css";
-import { Cog } from "lucide-react"; // um único ícone para todos
+import { Cog } from "lucide-react";
 
 // Deriva estado "active/inactive" a partir dos dados do Orion
 function deriveStatus(info, fallback = "inactive") {
   if (!info) return fallback;
   const num = (v) => (v == null ? NaN : Number(v));
 
-  const p = num(info?.TotalPower?.value);           // W
-  if (!Number.isNaN(p) && p > 50) return "active";  // >50 W => active
+  const p = num(info?.TotalPower?.value);
+  if (!Number.isNaN(p) && p > 50) return "active";
 
   const i1 = num(info?.Phase1Current?.value);
   const i2 = num(info?.Phase2Current?.value);
@@ -25,6 +30,7 @@ const justNumber = (id) => String(id).match(/\d+/)?.[0] ?? id;
 
 export default function FactoryMap({
   selectedZone,
+  onChangeZone,          // <-- opcional: passa setSelectedZone aqui
   onSelectMachine,
   machineData,
   selectedMachine,
@@ -39,9 +45,20 @@ export default function FactoryMap({
   const zoneData = layoutData[selectedZone];
   if (!zoneData) return <p>Zone not found.</p>;
 
-  const backgroundImage = require(`../assets/${zoneData.image}`);
-  const machines = zoneData.machines;
+  // imagem pode vir de assets (require), data URL ou http(s)
+  let backgroundImage;
+  const img = zoneData.image;
+  if (img?.startsWith?.("data:") || img?.startsWith?.("http")) {
+    backgroundImage = img;
+  } else {
+    try {
+      backgroundImage = require(`../assets/${img}`);
+    } catch {
+      backgroundImage = img; // fallback (ex.: /uploads/…)
+    }
+  }
 
+  // dimensões base informadas pela zona (ou defaults)
   const baseW = zoneData.baseWidth || 800;
   const baseH = zoneData.baseHeight || 600;
 
@@ -66,6 +83,13 @@ export default function FactoryMap({
 
   const placing = Boolean(placementCandidateId);
   const relocating = Boolean(relocateCandidateId);
+  const machines = zoneData.machines || {};
+
+  // escolhe próxima zona para focar após remoção
+  function pickNextZone(current) {
+    const all = listZones().filter(z => z !== current);
+    return all[0] || null;
+  }
 
   return (
     <div
@@ -73,27 +97,46 @@ export default function FactoryMap({
       className="factory-map"
       style={{
         backgroundImage: `url(${backgroundImage})`,
-        backgroundSize: "contain",
+        backgroundSize: "contain",          // mantém proporção
         backgroundRepeat: "no-repeat",
         backgroundPosition: "center",
-        width: "800px",
-        height: "600px",
+        aspectRatio: `${baseW} / ${baseH}`, // zona responsiva
+        width: "100%",
+        maxWidth: "1100px",
+        height: "auto",
         position: "relative",
         border: "1px solid #ccc",
         borderRadius: "10px",
         cursor: placing || relocating ? "crosshair" : "default",
+        marginInline: "auto",
       }}
       onClick={handleMapClick}
       title={
-        placing
-          ? "Click to place machine"
-          : relocating
-          ? "Click to move machine"
-          : undefined
+        placing ? "Click to place machine"
+        : relocating ? "Click to move machine"
+        : undefined
       }
     >
+      {/* Botão para remover zona (só para zonas criadas no overlay) */}
+      {isRemovableZone(selectedZone) && (
+        <button
+          className="map-remove-zone"
+          title={`Remove zone ${selectedZone}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (!window.confirm(`Remove zone "${selectedZone}"?`)) return;
+            const next = pickNextZone(selectedZone);
+            if (removeZone(selectedZone)) {
+              onChangeZone?.(next);
+            }
+          }}
+        >
+          Remove zone {selectedZone}
+        </button>
+      )}
+
       {Object.entries(machines).map(([id, data]) => {
-        const info = machineData[id];
+        const info = machineData?.[id];
         const status = deriveStatus(info, data.status || "inactive");
         const isSelected = selectedMachine === id;
 
@@ -119,7 +162,7 @@ export default function FactoryMap({
             style={{ top: `${topPct}%`, left: `${leftPct}%` }}
             onClick={(ev) => {
               ev.stopPropagation();
-              onSelectMachine(id);
+              onSelectMachine?.(id);
             }}
           >
             <div className="machine-tile">
