@@ -1,5 +1,5 @@
 // FactoryMap.jsx
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import {
   getEffectiveLayout,
   removeZone,
@@ -7,6 +7,7 @@ import {
   listZones
 } from "../utils/layoutStore";
 import "./FactoryMap.css";
+import Modal from "./Modal";               // ⬅️ usa o teu Modal
 import { Cog } from "lucide-react";
 
 // Deriva estado "active/inactive" a partir dos dados do Orion
@@ -25,12 +26,11 @@ function deriveStatus(info, fallback = "inactive") {
 
   return fallback;
 }
-
 const justNumber = (id) => String(id).match(/\d+/)?.[0] ?? id;
 
 export default function FactoryMap({
   selectedZone,
-  onChangeZone,          // <-- opcional: passa setSelectedZone aqui
+  onChangeZone,          // passa setSelectedZone aqui no pai
   onSelectMachine,
   machineData,
   selectedMachine,
@@ -40,6 +40,7 @@ export default function FactoryMap({
   onRelocate,             // ({ id, x, y, zone })
 }) {
   const containerRef = useRef(null);
+  const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
 
   const layoutData = getEffectiveLayout();
   const zoneData = layoutData[selectedZone];
@@ -91,16 +92,24 @@ export default function FactoryMap({
     return all[0] || null;
   }
 
+  function confirmRemoveZone() {
+    const next = pickNextZone(selectedZone);
+    if (removeZone(selectedZone)) {
+      setShowRemoveConfirm(false);
+      onChangeZone?.(next);
+    }
+  }
+
   return (
     <div
       ref={containerRef}
       className="factory-map"
       style={{
         backgroundImage: `url(${backgroundImage})`,
-        backgroundSize: "contain",          // mantém proporção
+        backgroundSize: "contain",
         backgroundRepeat: "no-repeat",
         backgroundPosition: "center",
-        aspectRatio: `${baseW} / ${baseH}`, // zona responsiva
+        aspectRatio: `${baseW} / ${baseH}`,
         width: "100%",
         maxWidth: "1100px",
         height: "auto",
@@ -117,18 +126,14 @@ export default function FactoryMap({
         : undefined
       }
     >
-      {/* Botão para remover zona (só para zonas criadas no overlay) */}
+      {/* Botão para remover zona (apenas para zonas criadas no overlay) */}
       {isRemovableZone(selectedZone) && (
         <button
           className="map-remove-zone"
           title={`Remove zone ${selectedZone}`}
           onClick={(e) => {
             e.stopPropagation();
-            if (!window.confirm(`Remove zone "${selectedZone}"?`)) return;
-            const next = pickNextZone(selectedZone);
-            if (removeZone(selectedZone)) {
-              onChangeZone?.(next);
-            }
+            setShowRemoveConfirm(true);
           }}
         >
           Remove zone {selectedZone}
@@ -173,7 +178,7 @@ export default function FactoryMap({
         );
       })}
 
-      {/* Legenda fixa no canto inferior-esquerdo */}
+      {/* Legenda */}
       <div className="map-legend">
         <span><div className="legend-dot legend-active" /> Active</span>
         <span><div className="legend-dot legend-inactive" /> Inactive</span>
@@ -181,6 +186,33 @@ export default function FactoryMap({
         {placing && <span>• Placing: {placementCandidateId}</span>}
         {relocating && <span>• Moving: {relocateCandidateId}</span>}
       </div>
+
+      {/* Confirm dialog (mesmo look dos outros modais) */}
+      <Modal open={showRemoveConfirm} onClose={() => setShowRemoveConfirm(false)}>
+        <h3 style={{ marginTop: 0, display: "flex", alignItems: "center", gap: 8 }}>
+          🗑️ Remove zone
+        </h3>
+        <p style={{ marginTop: 8 }}>
+          Are you sure you want to remove <strong>{selectedZone}</strong>?<br />
+          All machines placed in this zone (overlay) will be deleted.
+        </p>
+        <div className="az-actions" style={{ marginTop: 16 }}>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            onClick={() => setShowRemoveConfirm(false)}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn-danger btn-sm"
+            onClick={confirmRemoveZone}
+          >
+            Remove
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 }
