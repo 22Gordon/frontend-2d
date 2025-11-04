@@ -1,20 +1,19 @@
 import React, { useEffect, useState } from "react";
 import "./ZoneSelector.css";
 import AddZonePanel from "./AddZonePanel";
+import Modal from "./Modal";
 import { getEffectiveLayout, exportEffectiveLayoutAsJson } from "../utils/layoutStore";
 
 export default function ZoneSelector({ selectedZone, onChangeZone }) {
   const [showAdd, setShowAdd] = useState(false);
-  const [version, setVersion] = useState(0);
 
-  // Re-render quando o layout muda + corrige a seleção se a zona foi removida
+  // Re-render e corrige seleção se a zona desaparecer (ex.: delete)
   useEffect(() => {
     const onUpd = () => {
       const zonesNow = Object.keys(getEffectiveLayout());
       if (!zonesNow.includes(selectedZone) && zonesNow.length > 0) {
-        onChangeZone?.(zonesNow[0]); // muda para a primeira zona existente
+        onChangeZone?.(zonesNow[0]);
       }
-      setVersion(v => v + 1);
     };
     window.addEventListener("layout:updated", onUpd);
     return () => window.removeEventListener("layout:updated", onUpd);
@@ -29,6 +28,7 @@ export default function ZoneSelector({ selectedZone, onChangeZone }) {
       {zones.map((z) => (
         <button
           key={z}
+          type="button"
           className={`chip ${selectedZone === z ? "is-active" : ""}`}
           onClick={() => onChangeZone?.(z)}
           title={`Zone ${z}`}
@@ -37,15 +37,31 @@ export default function ZoneSelector({ selectedZone, onChangeZone }) {
         </button>
       ))}
 
-      {/* ações (sem o botão de apagar) */}
-      <button className="chip" onClick={() => setShowAdd(true)} title="Add zone">+</button>
-      <button className="chip" onClick={() => exportEffectiveLayoutAsJson()} title="Export layout">⤓</button>
+      <button
+        type="button"
+        className="chip"
+        onClick={() => setShowAdd(true)}
+        title="Add zone"
+        aria-label="Add zone"
+      >
+        +
+      </button>
 
-      {showAdd && (
-        <div style={{ marginTop: 8 }}>
-          <AddZonePanel onClose={() => setShowAdd(false)} />
-        </div>
-      )}
+      <button
+        type="button"
+        className="chip"
+        onClick={() => exportEffectiveLayoutAsJson()}
+        title="Export layout"
+        aria-label="Export layout"
+      >
+        ⤓
+      </button>
+
+      {/*Passamos open ao Modal */}
+      <Modal open={showAdd} onClose={() => setShowAdd(false)}>
+        <h3 style={{ margin: 0, marginBottom: 8 }}>Add zone</h3>
+        <AddZonePanel onClose={() => setShowAdd(false)} />
+      </Modal>
     </div>
   );
 }

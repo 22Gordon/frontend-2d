@@ -1,0 +1,94 @@
+:root{
+  --az-border: #e5e7eb;
+  --az-primary: #3b82f6;
+  --az-primary-600: #2563eb;
+  --az-danger: #ef4444;
+  --az-danger-600: #dc2626;
+  --az-muted: #6b7280;
+}
+
+/* Form layout */
+.az-form{
+  display: grid;
+  gap: 12px;
+  width: 100%;
+  max-width: 100%;
+}
+
+.az-field{ display: grid; gap: 6px; }
+.az-field > span{ font-size: .9rem; color: var(--az-muted); }
+
+.az-input,
+.az-file{
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--az-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  outline: none;
+  font-size: .95rem;
+  transition: border-color .15s, box-shadow .15s, background .15s;
+}
+.az-input:focus,
+.az-file:focus-visible{
+  border-color: var(--az-primary);
+  box-shadow: 0 0 0 3px rgba(37,99,235,.25);
+  background: #fff;
+}
+
+/* Actions */
+.az-actions{
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;          /* lado a lado */
+  margin-top: 12px;
+}
+.az-actions .btn{ width: auto; }  /* não ocupar 100% */
+
+/* Buttons */
+.btn{
+  border: 1px solid var(--az-border);
+  border-radius: 10px;
+  font-weight: 600;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: transform .05s, background .15s, border-color .15s;
+}
+.btn:active{ transform: translateY(1px); }
+
+.btn-sm{
+  padding: 8px 12px;
+  font-size: .95rem;
+}
+
+.btn-primary{
+  background: var(--az-primary);
+  border-color: var(--az-primary);
+  color: #fff;
+}
+.btn-primary:hover{
+  background: var(--az-primary-600);
+  border-color: var(--az-primary-600);
+}
+
+.btn-danger{
+  background: var(--az-danger);
+  border-color: var(--az-danger);
+  color: #fff;
+}
+.btn-danger:hover{
+  background: var(--az-danger-600);
+  border-color: var(--az-danger-600);
+}
+
+/* Errors */
+.az-error{ color: #dc2626; font-size: .9rem; margin: 0; }
+
+/* Mobile: deixa quebrar se faltar espaço */
+@media (max-width: 480px){
+  .az-actions{ flex-wrap: wrap; justify-content: stretch; }
+  .az-actions .btn{ flex: 1 1 48%; }
+}

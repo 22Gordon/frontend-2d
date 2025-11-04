@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { upsertZone } from "../utils/layoutStore";
+import "./AddZonePanel.css";
 
 export default function AddZonePanel({ onClose }) {
   const [zoneId, setZoneId] = useState("");
@@ -29,8 +30,8 @@ export default function AddZonePanel({ onClose }) {
     setError("");
 
     const id = zoneId.trim();
-    if (!id) return setError("Indica um ID para a zona (ex.: Z1).");
-    if (!file) return setError("Escolhe uma imagem PNG / JPG.");
+    if (!id) return setError("Please provide a zone ID (e.g., Z1).");
+    if (!file) return setError("Please choose a PNG/JPG image.");
 
     try {
       const dataUrl = await fileToDataURL(file);
@@ -46,28 +47,42 @@ export default function AddZonePanel({ onClose }) {
       onClose?.(true);
     } catch (err) {
       console.error(err);
-      setError("Falha ao ler a imagem. Tenta novamente.");
+      setError("Could not read the image. Please try again.");
     }
   }
 
   return (
-    <div style={{ border: "1px solid #ddd", borderRadius: 12, padding: 16, background: "#fff" }}>
-      <h3 style={{ marginTop: 0 }}>Adicionar zona</h3>
-      <form onSubmit={onSubmit} style={{ display: "grid", gap: 12 }}>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>ID da zona</span>
-          <input value={zoneId} onChange={(e) => setZoneId(e.target.value)} placeholder="ex.: Z1" />
-        </label>
-        <label style={{ display: "grid", gap: 6 }}>
-          <span>Imagem (PNG/JPG)</span>
-          <input type="file" accept="image/png,image/jpeg" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-        </label>
-        {error && <p style={{ color: "crimson", margin: 0 }}>{error}</p>}
-        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-          <button type="button" onClick={() => onClose?.(false)}>Cancelar</button>
-          <button type="submit">Criar zona</button>
-        </div>
-      </form>
-    </div>
+    <form onSubmit={onSubmit} className="az-form">
+      <label className="az-field">
+        <span>Zone ID</span>
+        <input
+          className="az-input"
+          value={zoneId}
+          onChange={(e) => setZoneId(e.target.value)}
+          placeholder="e.g., Z1"
+        />
+      </label>
+
+      <label className="az-field">
+        <span>Image (PNG/JPG)</span>
+        <input
+          className="az-file"
+          type="file"
+          accept="image/png,image/jpeg"
+          onChange={(e) => setFile(e.target.files?.[0] || null)}
+        />
+      </label>
+
+      {error && <p className="az-error">{error}</p>}
+
+      <div className="az-actions">
+        <button type="button" className="btn btn-danger btn-sm" onClick={() => onClose?.(false)}>
+          Cancel
+        </button>
+        <button type="submit" className="btn btn-primary btn-sm">
+          Create zone
+        </button>
+      </div>
+    </form>
   );
 }
