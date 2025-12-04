@@ -18,10 +18,18 @@
 
 /* posicionamento */
 .md--sticky{ position: sticky; top: 16px; }
+/* compatível com o nome usado no JSX */
+.md-sticky{ position: sticky; top: 16px; }
+
 .md--centered{ align-self: center; }  /* centra verticalmente na coluna */
 
 /* tipografia/linhas */
-.md-title{ font-size:18px; font-weight:800; margin:0 0 8px; color:#0f172a; }
+.md-title{
+  font-size:18px;
+  font-weight:800;
+  margin:0 0 8px;
+  color:#0f172a;
+}
 
 .md-grid{
   display:grid;
@@ -29,25 +37,91 @@
   column-gap:12px;
   row-gap:6px;
 }
-.md-label{ color:#4b5563; font-weight:600; padding:2px 0; border-bottom:1px dashed #e6e7eb; }
-.md-value{ color:#0f172a; text-align:right; font-variant-numeric:tabular-nums; padding:2px 0; border-bottom:1px dashed #e6e7eb; }
+
+.md-label{
+  color:#4b5563;
+  font-weight:600;
+  padding:2px 0;
+  border-bottom:1px dashed #e6e7eb;
+}
+
+.md-value{
+  color:#0f172a;
+  text-align:right;
+  font-variant-numeric:tabular-nums;
+  padding:2px 0;
+  border-bottom:1px dashed #e6e7eb;
+  white-space: normal;   /* permite várias linhas */
+  overflow: visible;
+}
 
 /* remover linha da última row */
 .md-grid > .md-label:last-of-type,
-.md-grid > .md-value:last-of-type{ border-bottom:none; }
+.md-grid > .md-value:last-of-type{
+  border-bottom:none;
+}
 
-.md-updated{ margin-top:10px; font-size:11px; color:#6b7280; }
+.md-updated{
+  margin-top:10px;
+  font-size:11px;
+  color:#6b7280;
+}
 
 /* estados */
 .md-state{
-  display:flex; align-items:center; gap:8px;
-  padding:12px; border-radius:10px; background:#fff;
-  border:1px solid #e5e7eb; box-shadow:0 4px 12px rgba(0,0,0,.04);
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:12px;
+  border-radius:10px;
+  background:#fff;
+  border:1px solid #e5e7eb;
+  box-shadow:0 4px 12px rgba(0,0,0,.04);
 }
-.md-state--error{ border-left:4px solid #dc2626; background:#fff7f7; }
+.md-state--error{
+  border-left:4px solid #dc2626;
+  background:#fff7f7;
+}
 .md-state-text{ color:#374151; }
-.md-state-icon{ width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center; color:#6b7280; font-weight:800; }
+.md-state-icon{
+  width:16px;
+  height:16px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  color:#6b7280;
+  font-weight:800;
+}
 .md-state-icon--error{ color:#dc2626; }
+
 @keyframes md-spin{ to{ transform:rotate(360deg);} }
-.md-css-spinner{ width:16px; height:16px; border:3px solid rgba(0,0,0,.15); border-top-color:#1d4ed8; border-radius:50%; animation:md-spin .9s linear infinite; }
+
+.md-css-spinner{
+  width:16px;
+  height:16px;
+  border:3px solid rgba(0,0,0,.15);
+  border-top-color:#1d4ed8;
+  border-radius:50%;
+  animation:md-spin .9s linear infinite;
+}
+
 .md-retry{ margin-left:auto; }
+
+/* ===== valores em JSON (robô, arrays, etc.) ===== */
+.md-json{
+  display:block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size:11px;
+  white-space:pre;          /* respeita quebras de linha do JSON.stringify */
+  word-break:break-all;
+  background:rgba(15,23,42,0.03);
+  padding:4px 6px;
+  border-radius:6px;
+}
+
+/* quando há JSON, alinhamos visualmente à esquerda dentro da célula */
+.md-value .md-json{
+  text-align:left;
+}
+  

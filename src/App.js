@@ -12,6 +12,7 @@ import AddMachinePanel from "./components/AddMachinePanel";
 import Modal from "./components/Modal";
 import ConfirmDialog from "./components/ConfirmDialog";
 import OrionSettingsPanel from "./components/OrionSettingsPanel";
+import { useOrionConfig } from "./context/OrionConfigContext";
 
 import { getMachineDataFromOrion } from "./services/orionClient";
 import {
@@ -44,7 +45,9 @@ function App() {
   const [layout, setLayout] = useState(() => getEffectiveLayout());
   const [layoutVersion, setLayoutVersion] = useState(0); // bump sempre que layout muda
   const zoneMachines = Object.keys(layout[selectedZone]?.machines || {});
+  const { config: orionConfigForZone } = useOrionConfig(selectedZone);
   // ------------------------------------------------------------
+  
 
   // helpers de estado de pedidos
   const setLoading = (id, loading) =>
@@ -63,20 +66,27 @@ function App() {
       [id]: { ...(prev[id] || {}), loading: false, error },
     }));
 
-  const fetchAndSetMachineData = useCallback(async (machineId) => {
-    try {
-      setLoading(machineId, true);
-      const data = await getMachineDataFromOrion(machineId);
-      if (data) {
-        setMachineData((prev) => ({ ...prev, [machineId]: data }));
-        setLoading(machineId, false);
-      } else {
-        setError(machineId, "No data returned");
+    const fetchAndSetMachineData = useCallback(
+    async (machineId) => {
+      try {
+        setLoading(machineId, true);
+        const data = await getMachineDataFromOrion(
+          machineId,
+          orionConfigForZone
+        );
+        if (data) {
+          setMachineData((prev) => ({ ...prev, [machineId]: data }));
+          setLoading(machineId, false);
+        } else {
+          setError(machineId, "No data returned");
+        }
+      } catch (e) {
+        setError(machineId, e?.message || "Network error");
       }
-    } catch (e) {
-      setError(machineId, e?.message || "Network error");
-    }
-  }, []);
+    },
+    [orionConfigForZone]
+  );
+
 
   const handleSelectMachine = (machineId) => {
     setSelectedMachine(machineId);

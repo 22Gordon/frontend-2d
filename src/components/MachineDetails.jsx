@@ -1,3 +1,4 @@
+// src/components/MachineDetails.jsx
 import React, { useMemo } from "react";
 import "./MachineDetails.css";
 
@@ -22,37 +23,84 @@ const LABELS = {
 };
 
 const UNITS = {
-  Frequency: "Hz", Frequency2: "Hz",
-  Phase1Voltage: "V", Phase2Voltage: "V", Phase3Voltage: "V",
-  Phase1Current: "A", Phase2Current: "A", Phase3Current: "A",
-  TotalPower: "W", TotalApparentPower: "VA", TotalReactivePower: "var",
-  TotalActiveEnergy: "Wh", TotalReactiveEnergy: "varh",
-  distance: "mm", gasUsage: "",
+  Frequency: "Hz",
+  Frequency2: "Hz",
+  Phase1Voltage: "V",
+  Phase2Voltage: "V",
+  Phase3Voltage: "V",
+  Phase1Current: "A",
+  Phase2Current: "A",
+  Phase3Current: "A",
+  TotalPower: "W",
+  TotalApparentPower: "VA",
+  TotalReactivePower: "var",
+  TotalActiveEnergy: "Wh",
+  TotalReactiveEnergy: "varh",
+  distance: "mm",
+  gasUsage: "",
 };
 
 const ORDER = [
-  "TotalActiveEnergy","TotalApparentPower","TotalReactiveEnergy","TotalReactivePower",
-  "TotalPower","TotalPowerFactor",
-  "Phase1Voltage","Phase2Voltage","Phase3Voltage",
-  "Phase1Current","Phase2Current","Phase3Current",
-  "Frequency","Frequency2","gasUsage","distance"
+  "TotalActiveEnergy",
+  "TotalApparentPower",
+  "TotalReactiveEnergy",
+  "TotalReactivePower",
+  "TotalPower",
+  "TotalPowerFactor",
+  "Phase1Voltage",
+  "Phase2Voltage",
+  "Phase3Voltage",
+  "Phase1Current",
+  "Phase2Current",
+  "Phase3Current",
+  "Frequency",
+  "Frequency2",
+  "gasUsage",
+  "distance",
 ];
 
 /* Nº profissional: separador de milhar e casas decimais “inteligentes” */
 function fmtNumber(n, { max = 2 } = {}) {
   return new Intl.NumberFormat(undefined, {
     maximumFractionDigits: max,
-    minimumFractionDigits: 0
+    minimumFractionDigits: 0,
   }).format(n);
 }
 
-function formatValue(key, v) {
+/**
+ * Render genérico de valores:
+ * - números com unidades (Adalberto)
+ * - strings normais
+ * - arrays / objetos (robô) em bloco JSON legível
+ */
+function renderValue(key, v) {
   if (v === null || v === undefined) return "—";
+
+  // Números -> formato profissional com unidades
   if (typeof v === "number") {
     const digits = Math.abs(v) >= 100 ? 0 : 2;
     const txt = fmtNumber(v, { max: digits });
     return `${txt}${UNITS[key] ? ` ${UNITS[key]}` : ""}`;
   }
+
+  // Strings simples -> devolvemos tal como vêm
+  if (typeof v === "string") {
+    return v;
+  }
+
+  // Arrays (ex.: joint_temperatures) ou objetos (TCP_pose, force, etc.)
+  if (Array.isArray(v) || typeof v === "object") {
+    let pretty;
+    try {
+      pretty = JSON.stringify(v, null, 2); // indentado para ficar legível
+    } catch {
+      pretty = String(v);
+    }
+
+    return <code className="md-json">{pretty}</code>;
+  }
+
+  // Fallback genérico
   return String(v);
 }
 
@@ -63,7 +111,7 @@ export default function MachineDetails({
   error = null,
   onRetry,
   Spinner,
-  sticky = false,   // <-- podes passar sticky={true} se quiseres “colar” o card
+  sticky = false, // <-- podes passar sticky={true} se quiseres “colar” o card
 }) {
   // HOOKS no topo
   const excluded = new Set(["TimeInstant", "config", "device_info"]);
@@ -99,7 +147,11 @@ export default function MachineDetails({
     return (
       <div className={`md-card md-state ${sticky ? "md-sticky" : ""}`}>
         <div className="md-state-icon">
-          {Spinner ? <Spinner size={18} /> : <span className="md-css-spinner" aria-label="Loading" />}
+          {Spinner ? (
+            <Spinner size={18} />
+          ) : (
+            <span className="md-css-spinner" aria-label="Loading" />
+          )}
         </div>
         <div className="md-state-text">Loading data from Orion…</div>
       </div>
@@ -108,10 +160,19 @@ export default function MachineDetails({
 
   if (error) {
     return (
-      <div className={`md-card md-state md-state--error ${sticky ? "md-sticky" : ""}`} role="alert">
+      <div
+        className={`md-card md-state md-state--error ${
+          sticky ? "md-sticky" : ""
+        }`}
+        role="alert"
+      >
         <div className="md-state-icon md-state-icon--error">!</div>
         <div className="md-state-text">Couldn’t load data: {error}</div>
-        {onRetry && <button className="btn btn--solid md-retry" onClick={onRetry}>Try again</button>}
+        {onRetry && (
+          <button className="btn btn--solid md-retry" onClick={onRetry}>
+            Try again
+          </button>
+        )}
       </div>
     );
   }
@@ -121,7 +182,11 @@ export default function MachineDetails({
       <div className={`md-card md-state ${sticky ? "md-sticky" : ""}`}>
         <div className="md-state-icon">ℹ️</div>
         <div className="md-state-text">No data yet.</div>
-        {onRetry && <button className="btn md-retry" onClick={onRetry}>Refresh</button>}
+        {onRetry && (
+          <button className="btn md-retry" onClick={onRetry}>
+            Refresh
+          </button>
+        )}
       </div>
     );
   }
@@ -134,8 +199,12 @@ export default function MachineDetails({
       <div className="md-grid" role="table" aria-label="Machine metrics">
         {entries.map(([key, attr]) => (
           <React.Fragment key={key}>
-            <div className="md-label" role="rowheader">{LABELS[key] || key}</div>
-            <div className="md-value" role="cell">{formatValue(key, attr.value)}</div>
+            <div className="md-label" role="rowheader">
+              {LABELS[key] || key}
+            </div>
+            <div className="md-value" role="cell">
+              {renderValue(key, attr.value)}
+            </div>
           </React.Fragment>
         ))}
       </div>
