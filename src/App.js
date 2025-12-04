@@ -11,6 +11,7 @@ import Spinner from "./components/Spinner";
 import AddMachinePanel from "./components/AddMachinePanel";
 import Modal from "./components/Modal";
 import ConfirmDialog from "./components/ConfirmDialog";
+import OrionSettingsPanel from "./components/OrionSettingsPanel";
 
 import { getMachineDataFromOrion } from "./services/orionClient";
 import {
@@ -36,6 +37,9 @@ function App() {
   // Confirm remove
   const [confirmRemoveId, setConfirmRemoveId] = useState(null);
 
+  // Orion settings modal
+  const [showOrionSettings, setShowOrionSettings] = useState(false);
+
   // ---- Layout em STATE (para forçar re-render na sidebar) ----
   const [layout, setLayout] = useState(() => getEffectiveLayout());
   const [layoutVersion, setLayoutVersion] = useState(0); // bump sempre que layout muda
@@ -46,7 +50,11 @@ function App() {
   const setLoading = (id, loading) =>
     setReqState((prev) => ({
       ...prev,
-      [id]: { ...(prev[id] || {}), loading, ...(loading ? { error: null } : {}) },
+      [id]: {
+        ...(prev[id] || {}),
+        loading,
+        ...(loading ? { error: null } : {}),
+      },
     }));
 
   const setError = (id, error) =>
@@ -110,7 +118,7 @@ function App() {
   // place -> cria e já faz fetch para pintar estado
   function handlePlace({ id, x, y, zone }) {
     addMachineToLayout({ zone, id, x, y, status: "inactive" });
-    setLayout(getEffectiveLayout());       // atualiza sidebar imediatamente
+    setLayout(getEffectiveLayout()); // atualiza sidebar imediatamente
     setLayoutVersion((v) => v + 1);
     setPlacementCandidateId(null);
     fetchAndSetMachineData(id);
@@ -118,7 +126,7 @@ function App() {
 
   function handleRelocate({ id, x, y, zone }) {
     setMachinePosition({ zone, id, x, y });
-    setLayout(getEffectiveLayout());       // reflete posição se necessário (se lista exibir coords)
+    setLayout(getEffectiveLayout()); // reflete posição se necessário (se lista exibir coords)
     setLayoutVersion((v) => v + 1);
     setMoveMode(false);
   }
@@ -133,7 +141,9 @@ function App() {
   // Abre o modal de confirmação
   function handleRemoveMachine(id) {
     if (!isOverlayMachine(selectedZone, id)) {
-      alert("This machine is part of the base layout and cannot be removed here.");
+      alert(
+        "This machine is part of the base layout and cannot be removed here."
+      );
       return;
     }
     setConfirmRemoveId(id);
@@ -172,24 +182,63 @@ function App() {
   return (
     <div className="app-shell">
       <Sidebar
-        key={`sidebar-${selectedZone}-${layoutVersion}`}  // garante re-render a cada mudança
+        key={`sidebar-${selectedZone}-${layoutVersion}`} // garante re-render a cada mudança
         machines={zoneMachines}
         selectedMachine={selectedMachine}
         onSelectMachine={handleSelectMachine}
         onAddMachine={() => setOpenAdd(true)}
-        onMoveMachine={handleMoveMachine}        // ✏️
-        onRemoveMachine={handleRemoveMachine}    // 🗑️ abre modal
+        onMoveMachine={handleMoveMachine} // ✏️
+        onRemoveMachine={handleRemoveMachine} // 🗑️ abre modal
       />
 
       <div className="app-main">
-        <ZoneSelector selectedZone={selectedZone} onChangeZone={handleZoneChange} />
+        {/* Zona + botão de configurações do Orion */}
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "8px",
+            marginBottom: "8px",
+          }}
+        >
+          <ZoneSelector
+            selectedZone={selectedZone}
+            onChangeZone={handleZoneChange}
+          />
+
+          <button
+            type="button"
+            onClick={() => setShowOrionSettings(true)}
+            title="Orion settings"
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: "999px",
+              border: "1px solid rgba(0,0,0,0.08)",
+              background: "white",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 4px 12px rgba(15, 23, 42, 0.15)",
+              cursor: "pointer",
+              fontSize: "14px",
+            }}
+          >
+            ⚙️
+          </button>
+
+        </div>
 
         {zoneErrors.length > 0 && (
           <div className="alert alert--info" role="status" aria-live="polite">
             <div className="alert__content">
-              <span className="alert__icon" aria-hidden>⚠️</span>
+              <span className="alert__icon" aria-hidden>
+                ⚠️
+              </span>
               <span className="alert__text">
-                <strong>Orion:</strong> {zoneErrors.length} machine(s) without data
+                <strong>Orion:</strong> {zoneErrors.length} machine(s) without
+                data
               </span>
             </div>
             <div className="alert__actions">
@@ -230,8 +279,22 @@ function App() {
         </div>
       </div>
 
+      {/* Add machine */}
       <Modal open={openAdd} onClose={() => setOpenAdd(false)}>
-        <AddMachinePanel selectedZone={selectedZone} onEnterPlaceMode={handleEnterPlaceMode} />
+        <AddMachinePanel
+          selectedZone={selectedZone}
+          onEnterPlaceMode={handleEnterPlaceMode}
+        />
+      </Modal>
+
+      {/* Orion settings */}
+      <Modal
+        open={showOrionSettings}
+        onClose={() => setShowOrionSettings(false)}
+      >
+        <div style={{ minWidth: "420px", maxWidth: "520px" }}>
+          <OrionSettingsPanel zoneId={selectedZone} />
+        </div>
       </Modal>
 
       {/* Confirm remove */}
