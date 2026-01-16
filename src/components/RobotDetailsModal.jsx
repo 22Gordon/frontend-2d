@@ -46,7 +46,6 @@ export default function RobotDetailsModal({
   const [taskError, setTaskError] = useState(null);
   const [busyExecute, setBusyExecute] = useState(false);
 
-  // ✅ NEW
   const [removingId, setRemovingId] = useState(null);
 
   const selectedTask = useMemo(
@@ -54,9 +53,10 @@ export default function RobotDetailsModal({
     [tasks, selectedTaskId]
   );
 
-  const isRunning = useMemo(() => tasks.some((t) => t.status === "executing"), [
-    tasks,
-  ]);
+  const isRunning = useMemo(
+    () => tasks.some((t) => t.status === "executing"),
+    [tasks]
+  );
 
   // fetch tasks + polling (faster when executing)
   useEffect(() => {
@@ -67,17 +67,16 @@ export default function RobotDetailsModal({
       if (!robotNgsiId) return;
 
       try {
-        setLoadingTasks(true);
+        // ✅ show overlay only on first load (avoid UI "jump" during polling)
+        setLoadingTasks((prev) => (tasks.length === 0 ? true : prev));
         setTaskError(null);
 
         const all = await listTasksFromOrion(orionConfig, { limit: 30 });
 
-        // filter by robotId when available
         const filtered = all.filter(
           (t) => !robotNgsiId || t.robotId === robotNgsiId
         );
 
-        // sort by createdAt desc
         filtered.sort((a, b) =>
           String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
         );
@@ -86,10 +85,8 @@ export default function RobotDetailsModal({
           setTasks(filtered);
           setLoadingTasks(false);
 
-          // auto-select latest
           if (!selectedTaskId && filtered[0]?.id) setSelectedTaskId(filtered[0].id);
 
-          // ✅ se removeste a task selecionada, seleciona a primeira disponível
           if (selectedTaskId && !filtered.some((t) => t.id === selectedTaskId)) {
             setSelectedTaskId(filtered[0]?.id || null);
           }
@@ -111,6 +108,7 @@ export default function RobotDetailsModal({
       cancelled = true;
       if (timer) clearInterval(timer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orionConfig, robotNgsiId, isRunning, selectedTaskId]);
 
   const headerStatus = isRunning ? "Running" : "Idle";
@@ -127,7 +125,6 @@ export default function RobotDetailsModal({
     }
   }
 
-  // ✅ NEW: remove task from Orion + update UI immediately
   async function handleRemoveTask(taskId) {
     const t = tasks.find((x) => x.id === taskId);
 
@@ -205,7 +202,8 @@ export default function RobotDetailsModal({
           display: "grid",
           gridTemplateColumns: "320px 1fr 280px",
           gap: 12,
-          minHeight: 520,
+          height: "70vh", // ✅ fills modal space; avoids big white bottom
+          alignItems: "stretch",
         }}
       >
         {/* LEFT: Tasks */}
@@ -214,6 +212,10 @@ export default function RobotDetailsModal({
             border: "1px solid rgba(0,0,0,0.08)",
             borderRadius: 14,
             padding: 12,
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
           }}
         >
           <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
@@ -223,105 +225,153 @@ export default function RobotDetailsModal({
             </div>
           </div>
 
-          {loadingTasks && <div style={{ fontSize: 13, color: "#64748b" }}>Loading…</div>}
-          {taskError && <div style={{ fontSize: 13, color: "#dc2626" }}>{taskError}</div>}
+          {taskError && (
+            <div style={{ fontSize: 13, color: "#dc2626", marginTop: 6 }}>
+              {taskError}
+            </div>
+          )}
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
-            {tasks.map((t) => {
-              const active = t.id === selectedTaskId;
-              const label = `${t.pickPointId || "?"} → ${t.placePointId || "?"}`;
-              const progress = Math.max(0, Math.min(100, Number(t.progress || 0)));
-              const isRemoving = removingId === t.id;
+          {/* ✅ Scrollable list + loading overlay (Option A) */}
+          <div
+            style={{
+              position: "relative",
+              marginTop: 10,
+              flex: 1,
+              overflow: "auto",
+              paddingRight: 4,
+            }}
+          >
+            {loadingTasks && (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background: "rgba(255,255,255,0.65)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: 13,
+                  color: "#475569",
+                  zIndex: 2,
+                  borderRadius: 12,
+                  pointerEvents: "none",
+                }}
+              >
+                Loading tasks…
+              </div>
+            )}
 
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setSelectedTaskId(t.id)}
-                  style={{
-                    textAlign: "left",
-                    borderRadius: 12,
-                    padding: "10px 10px",
-                    border: active ? "2px solid #3b82f6" : "1px solid rgba(0,0,0,0.08)",
-                    background: active ? "rgba(59,130,246,0.08)" : "white",
-                    cursor: "pointer",
-                    position: "relative",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <span
-                      style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: 99,
-                        background: statusColor(t.status),
-                        display: "inline-block",
-                      }}
-                    />
-                    <div style={{ fontWeight: 700, fontSize: 13 }}>{label}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {tasks.map((t) => {
+                const active = t.id === selectedTaskId;
+                const label = `${t.pickPointId || "?"} → ${t.placePointId || "?"}`;
+                const progress = Math.max(0, Math.min(100, Number(t.progress || 0)));
+                const isRemoving = removingId === t.id;
 
-                    <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
-                      <div style={{ fontSize: 12, color: "#64748b" }}>{t.status}</div>
-
-                      {/* ✅ Remove button */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemoveTask(t.id);
-                        }}
-                        disabled={isRemoving || t.status === "executing"}
-                        title={
-                          t.status === "executing"
-                            ? "Cannot remove while executing"
-                            : "Remove task from Orion"
-                        }
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setSelectedTaskId(t.id)}
+                    style={{
+                      textAlign: "left",
+                      borderRadius: 12,
+                      padding: "10px 10px",
+                      border: active
+                        ? "2px solid #3b82f6"
+                        : "1px solid rgba(0,0,0,0.08)",
+                      background: active ? "rgba(59,130,246,0.08)" : "white",
+                      cursor: "pointer",
+                      position: "relative",
+                    }}
+                  >
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span
                         style={{
-                          border: "1px solid rgba(0,0,0,0.10)",
-                          background: "white",
-                          borderRadius: 10,
-                          padding: "6px 10px",
-                          cursor: t.status === "executing" ? "not-allowed" : "pointer",
-                          fontSize: 12,
-                          fontWeight: 800,
-                          color: "#dc2626",
-                          opacity: isRemoving ? 0.6 : 1,
+                          width: 10,
+                          height: 10,
+                          borderRadius: 99,
+                          background: statusColor(t.status),
+                          display: "inline-block",
+                        }}
+                      />
+                      <div style={{ fontWeight: 700, fontSize: 13 }}>{label}</div>
+
+                      <div
+                        style={{
+                          marginLeft: "auto",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
                         }}
                       >
-                        {isRemoving ? "Removing…" : "Remove"}
-                      </button>
-                    </div>
-                  </div>
+                        <div style={{ fontSize: 12, color: "#64748b" }}>{t.status}</div>
 
-                  <div style={{ marginTop: 8 }}>
-                    <div style={{ height: 8, borderRadius: 99, background: "rgba(15,23,42,0.08)" }}>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRemoveTask(t.id);
+                          }}
+                          disabled={isRemoving || t.status === "executing"}
+                          title={
+                            t.status === "executing"
+                              ? "Cannot remove while executing"
+                              : "Remove task from Orion"
+                          }
+                          style={{
+                            border: "1px solid rgba(0,0,0,0.10)",
+                            background: "white",
+                            borderRadius: 10,
+                            padding: "6px 10px",
+                            cursor: t.status === "executing" ? "not-allowed" : "pointer",
+                            fontSize: 12,
+                            fontWeight: 800,
+                            color: "#dc2626",
+                            opacity: isRemoving ? 0.6 : 1,
+                          }}
+                        >
+                          {isRemoving ? "Removing…" : "Remove"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 8 }}>
                       <div
                         style={{
                           height: 8,
                           borderRadius: 99,
-                          width: `${progress}%`,
-                          background: statusColor(t.status),
+                          background: "rgba(15,23,42,0.08)",
                         }}
-                      />
+                      >
+                        <div
+                          style={{
+                            height: 8,
+                            borderRadius: 99,
+                            width: `${progress}%`,
+                            background: statusColor(t.status),
+                          }}
+                        />
+                      </div>
                     </div>
-                  </div>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
 
-            {!loadingTasks && tasks.length === 0 && (
-              <div style={{ fontSize: 13, color: "#64748b" }}>
-                No tasks found for this robot.
-              </div>
-            )}
+              {!loadingTasks && tasks.length === 0 && (
+                <div style={{ fontSize: 13, color: "#64748b" }}>
+                  No tasks found for this robot.
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Execute */}
-          <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
+          {/* Execute (fixed at bottom) */}
+          <div style={{ marginTop: 12 }}>
             <button
               onClick={onExecuteSelected}
               disabled={!selectedTask || selectedTask.status !== "queued" || busyExecute}
               style={{
-                flex: 1,
+                width: "100%",
                 borderRadius: 12,
                 padding: "10px 12px",
                 border: "1px solid rgba(0,0,0,0.08)",
@@ -343,11 +393,22 @@ export default function RobotDetailsModal({
         </div>
 
         {/* CENTER */}
-        <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 14, padding: 12 }}>
+        <div
+          style={{
+            border: "1px solid rgba(0,0,0,0.08)",
+            borderRadius: 14,
+            padding: 12,
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+          }}
+        >
           <div style={{ fontWeight: 800, marginBottom: 10 }}>Execution View</div>
+
           <div
             style={{
-              height: 460,
+              flex: 1, // ✅ fill available space
               borderRadius: 14,
               background: "rgba(15,23,42,0.04)",
               display: "flex",
@@ -366,7 +427,17 @@ export default function RobotDetailsModal({
         </div>
 
         {/* RIGHT */}
-        <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 14, padding: 12 }}>
+        <div
+          style={{
+            border: "1px solid rgba(0,0,0,0.08)",
+            borderRadius: 14,
+            padding: 12,
+            height: "100%",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "auto",
+          }}
+        >
           <div style={{ fontWeight: 800, marginBottom: 10 }}>Robot Status</div>
 
           <div
@@ -392,7 +463,10 @@ export default function RobotDetailsModal({
             </div>
           </div>
 
-          <div style={{ marginTop: 16, fontWeight: 800, marginBottom: 10 }}>Metrics</div>
+          <div style={{ marginTop: 16, fontWeight: 800, marginBottom: 10 }}>
+            Metrics
+          </div>
+
           <div
             style={{
               fontSize: 13,
