@@ -1,8 +1,8 @@
-// src/components/RobotDetailsModal.jsx
 import React, { useEffect, useMemo, useState } from "react";
-import { listTasksFromOrion } from "../services/orionClientTasks";
+import { listTasksFromOrion, deleteTaskFromOrion } from "../services/orionClientTasks";
 
-const ORCHESTRATOR_URL = import.meta.env?.VITE_ORCHESTRATOR_URL || "http://localhost:3005";
+const ORCHESTRATOR_URL =
+  import.meta.env?.VITE_ORCHESTRATOR_URL || "http://localhost:3005";
 
 function statusColor(status) {
   if (status === "executing") return "#f59e0b";
@@ -12,9 +12,6 @@ function statusColor(status) {
 }
 
 function inferRobotNgsiId(machineId, machineData) {
-  // Best-effort mapping for demo:
-  // 1) if your machineData already contains a robot NGSI id, use it
-  // 2) fallback: if machineId looks like the robot, map to Robot:ur5e-01
   const maybe = machineData?.robotId || machineData?.id;
   if (typeof maybe === "string" && maybe.startsWith("Robot:")) return maybe;
 
@@ -23,16 +20,25 @@ function inferRobotNgsiId(machineId, machineData) {
 }
 
 async function executeTask(taskId) {
-  const res = await fetch(`${ORCHESTRATOR_URL}/tasks/${encodeURIComponent(taskId)}/execute`, {
-    method: "POST",
-  });
+  const res = await fetch(
+    `${ORCHESTRATOR_URL}/tasks/${encodeURIComponent(taskId)}/execute`,
+    { method: "POST" }
+  );
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json?.error || "Failed to execute task");
   return json;
 }
 
-export default function RobotDetailsModal({ machineId, machineData, orionConfig, onClose }) {
-  const robotNgsiId = useMemo(() => inferRobotNgsiId(machineId, machineData), [machineId, machineData]);
+export default function RobotDetailsModal({
+  machineId,
+  machineData,
+  orionConfig,
+  onClose,
+}) {
+  const robotNgsiId = useMemo(
+    () => inferRobotNgsiId(machineId, machineData),
+    [machineId, machineData]
+  );
 
   const [tasks, setTasks] = useState([]);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
@@ -40,15 +46,17 @@ export default function RobotDetailsModal({ machineId, machineData, orionConfig,
   const [taskError, setTaskError] = useState(null);
   const [busyExecute, setBusyExecute] = useState(false);
 
+  // ✅ NEW
+  const [removingId, setRemovingId] = useState(null);
+
   const selectedTask = useMemo(
     () => tasks.find((t) => t.id === selectedTaskId) || null,
     [tasks, selectedTaskId]
   );
 
-  const isRunning = useMemo(
-    () => tasks.some((t) => t.status === "executing"),
-    [tasks]
-  );
+  const isRunning = useMemo(() => tasks.some((t) => t.status === "executing"), [
+    tasks,
+  ]);
 
   // fetch tasks + polling (faster when executing)
   useEffect(() => {
@@ -65,10 +73,14 @@ export default function RobotDetailsModal({ machineId, machineData, orionConfig,
         const all = await listTasksFromOrion(orionConfig, { limit: 30 });
 
         // filter by robotId when available
-        const filtered = all.filter((t) => !robotNgsiId || t.robotId === robotNgsiId);
+        const filtered = all.filter(
+          (t) => !robotNgsiId || t.robotId === robotNgsiId
+        );
 
         // sort by createdAt desc
-        filtered.sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+        filtered.sort((a, b) =>
+          String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
+        );
 
         if (!cancelled) {
           setTasks(filtered);
@@ -76,6 +88,11 @@ export default function RobotDetailsModal({ machineId, machineData, orionConfig,
 
           // auto-select latest
           if (!selectedTaskId && filtered[0]?.id) setSelectedTaskId(filtered[0].id);
+
+          // ✅ se removeste a task selecionada, seleciona a primeira disponível
+          if (selectedTaskId && !filtered.some((t) => t.id === selectedTaskId)) {
+            setSelectedTaskId(filtered[0]?.id || null);
+          }
         }
       } catch (e) {
         if (!cancelled) {
@@ -110,6 +127,35 @@ export default function RobotDetailsModal({ machineId, machineData, orionConfig,
     }
   }
 
+  // ✅ NEW: remove task from Orion + update UI immediately
+  async function handleRemoveTask(taskId) {
+    const t = tasks.find((x) => x.id === taskId);
+
+    if (t?.status === "executing") {
+      alert("This task is currently executing. Wait until it finishes.");
+      return;
+    }
+
+    const ok = window.confirm("Remove this Task entity from Orion?");
+    if (!ok) return;
+
+    try {
+      setRemovingId(taskId);
+      await deleteTaskFromOrion(taskId, orionConfig);
+
+      setTasks((prev) => prev.filter((x) => x.id !== taskId));
+      setSelectedTaskId((prev) => {
+        if (prev !== taskId) return prev;
+        const remaining = tasks.filter((x) => x.id !== taskId);
+        return remaining[0]?.id || null;
+      });
+    } catch (e) {
+      alert(e?.message || "Failed to remove task");
+    } finally {
+      setRemovingId(null);
+    }
+  }
+
   return (
     <div
       style={{
@@ -128,7 +174,12 @@ export default function RobotDetailsModal({ machineId, machineData, orionConfig,
         <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
           <div style={{ fontSize: 13, color: "#334155" }}>
             Robot: <strong>{machineId}</strong>{" "}
-            <span style={{ marginLeft: 8, color: headerStatus === "Running" ? "#f59e0b" : "#64748b" }}>
+            <span
+              style={{
+                marginLeft: 8,
+                color: headerStatus === "Running" ? "#f59e0b" : "#64748b",
+              }}
+            >
               ● {headerStatus}
             </span>
           </div>
@@ -149,9 +200,22 @@ export default function RobotDetailsModal({ machineId, machineData, orionConfig,
       </div>
 
       {/* Layout */}
-      <div style={{ display: "grid", gridTemplateColumns: "320px 1fr 280px", gap: 12, minHeight: 520 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "320px 1fr 280px",
+          gap: 12,
+          minHeight: 520,
+        }}
+      >
         {/* LEFT: Tasks */}
-        <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 14, padding: 12 }}>
+        <div
+          style={{
+            border: "1px solid rgba(0,0,0,0.08)",
+            borderRadius: 14,
+            padding: 12,
+          }}
+        >
           <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
             <div style={{ fontWeight: 800 }}>Tasks</div>
             <div style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>
@@ -166,6 +230,9 @@ export default function RobotDetailsModal({ machineId, machineData, orionConfig,
             {tasks.map((t) => {
               const active = t.id === selectedTaskId;
               const label = `${t.pickPointId || "?"} → ${t.placePointId || "?"}`;
+              const progress = Math.max(0, Math.min(100, Number(t.progress || 0)));
+              const isRemoving = removingId === t.id;
+
               return (
                 <button
                   key={t.id}
@@ -177,6 +244,7 @@ export default function RobotDetailsModal({ machineId, machineData, orionConfig,
                     border: active ? "2px solid #3b82f6" : "1px solid rgba(0,0,0,0.08)",
                     background: active ? "rgba(59,130,246,0.08)" : "white",
                     cursor: "pointer",
+                    position: "relative",
                   }}
                 >
                   <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -190,8 +258,37 @@ export default function RobotDetailsModal({ machineId, machineData, orionConfig,
                       }}
                     />
                     <div style={{ fontWeight: 700, fontSize: 13 }}>{label}</div>
-                    <div style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>
-                      {t.status}
+
+                    <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ fontSize: 12, color: "#64748b" }}>{t.status}</div>
+
+                      {/* ✅ Remove button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRemoveTask(t.id);
+                        }}
+                        disabled={isRemoving || t.status === "executing"}
+                        title={
+                          t.status === "executing"
+                            ? "Cannot remove while executing"
+                            : "Remove task from Orion"
+                        }
+                        style={{
+                          border: "1px solid rgba(0,0,0,0.10)",
+                          background: "white",
+                          borderRadius: 10,
+                          padding: "6px 10px",
+                          cursor: t.status === "executing" ? "not-allowed" : "pointer",
+                          fontSize: 12,
+                          fontWeight: 800,
+                          color: "#dc2626",
+                          opacity: isRemoving ? 0.6 : 1,
+                        }}
+                      >
+                        {isRemoving ? "Removing…" : "Remove"}
+                      </button>
                     </div>
                   </div>
 
@@ -201,7 +298,7 @@ export default function RobotDetailsModal({ machineId, machineData, orionConfig,
                         style={{
                           height: 8,
                           borderRadius: 99,
-                          width: `${Math.max(0, Math.min(100, Number(t.progress || 0)))}%`,
+                          width: `${progress}%`,
                           background: statusColor(t.status),
                         }}
                       />
@@ -211,7 +308,7 @@ export default function RobotDetailsModal({ machineId, machineData, orionConfig,
               );
             })}
 
-            {(!loadingTasks && tasks.length === 0) && (
+            {!loadingTasks && tasks.length === 0 && (
               <div style={{ fontSize: 13, color: "#64748b" }}>
                 No tasks found for this robot.
               </div>
@@ -234,14 +331,18 @@ export default function RobotDetailsModal({ machineId, machineData, orionConfig,
                 cursor: selectedTask?.status === "queued" ? "pointer" : "not-allowed",
                 fontWeight: 800,
               }}
-              title={selectedTask?.status === "queued" ? "Start execution" : "Only queued tasks can be executed"}
+              title={
+                selectedTask?.status === "queued"
+                  ? "Start execution"
+                  : "Only queued tasks can be executed"
+              }
             >
               {busyExecute ? "Starting…" : "Execute"}
             </button>
           </div>
         </div>
 
-        {/* CENTER: Visual placeholder */}
+        {/* CENTER */}
         <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 14, padding: 12 }}>
           <div style={{ fontWeight: 800, marginBottom: 10 }}>Execution View</div>
           <div
@@ -264,11 +365,19 @@ export default function RobotDetailsModal({ machineId, machineData, orionConfig,
           </div>
         </div>
 
-        {/* RIGHT: Status & Metrics */}
+        {/* RIGHT */}
         <div style={{ border: "1px solid rgba(0,0,0,0.08)", borderRadius: 14, padding: 12 }}>
           <div style={{ fontWeight: 800, marginBottom: 10 }}>Robot Status</div>
 
-          <div style={{ fontSize: 13, color: "#0f172a", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div
+            style={{
+              fontSize: 13,
+              color: "#0f172a",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
             <div>
               <span style={{ color: "#64748b" }}>Mode:</span>{" "}
               <strong>{selectedTask?.executor || "—"}</strong>
@@ -284,10 +393,22 @@ export default function RobotDetailsModal({ machineId, machineData, orionConfig,
           </div>
 
           <div style={{ marginTop: 16, fontWeight: 800, marginBottom: 10 }}>Metrics</div>
-          <div style={{ fontSize: 13, color: "#0f172a", display: "flex", flexDirection: "column", gap: 8 }}>
+          <div
+            style={{
+              fontSize: 13,
+              color: "#0f172a",
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
             <div>
               <span style={{ color: "#64748b" }}>Execution time:</span>{" "}
-              <strong>{selectedTask?.durationMs ? `${(selectedTask.durationMs / 1000).toFixed(2)} s` : "—"}</strong>
+              <strong>
+                {selectedTask?.durationMs
+                  ? `${(selectedTask.durationMs / 1000).toFixed(2)} s`
+                  : "—"}
+              </strong>
             </div>
             <div>
               <span style={{ color: "#64748b" }}>Completed tasks:</span>{" "}
