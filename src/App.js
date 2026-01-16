@@ -13,6 +13,8 @@ import Modal from "./components/Modal";
 import ConfirmDialog from "./components/ConfirmDialog";
 import OrionSettingsPanel from "./components/OrionSettingsPanel";
 import { useOrionConfig } from "./context/OrionConfigContext";
+import RobotDetailsModal from "./components/RobotDetailsModal";
+import FullScreenModal from "./components/FullScreenModal";
 
 import { getMachineDataFromOrion } from "./services/orionClient";
 import {
@@ -41,13 +43,15 @@ function App() {
   // Orion settings modal
   const [showOrionSettings, setShowOrionSettings] = useState(false);
 
+  // Robot details modal (NEW)
+  const [showRobotDetails, setShowRobotDetails] = useState(false);
+
   // ---- Layout em STATE (para forçar re-render na sidebar) ----
   const [layout, setLayout] = useState(() => getEffectiveLayout());
   const [layoutVersion, setLayoutVersion] = useState(0); // bump sempre que layout muda
   const zoneMachines = Object.keys(layout[selectedZone]?.machines || {});
   const { config: orionConfigForZone } = useOrionConfig(selectedZone);
   // ------------------------------------------------------------
-  
 
   // helpers de estado de pedidos
   const setLoading = (id, loading) =>
@@ -66,14 +70,12 @@ function App() {
       [id]: { ...(prev[id] || {}), loading: false, error },
     }));
 
-    const fetchAndSetMachineData = useCallback(
+  const fetchAndSetMachineData = useCallback(
     async (machineId) => {
       try {
         setLoading(machineId, true);
-        const data = await getMachineDataFromOrion(
-          machineId,
-          orionConfigForZone
-        );
+        const data = await getMachineDataFromOrion(machineId, orionConfigForZone);
+
         if (data) {
           setMachineData((prev) => ({ ...prev, [machineId]: data }));
           setLoading(machineId, false);
@@ -86,7 +88,6 @@ function App() {
     },
     [orionConfigForZone]
   );
-
 
   const handleSelectMachine = (machineId) => {
     setSelectedMachine(machineId);
@@ -113,6 +114,11 @@ function App() {
     setMoveMode(false);
     setPlacementCandidateId(null);
     setConfirmRemoveId(null);
+
+    // fecha modais ao mudar de zona
+    setShowOrionSettings(false);
+    setShowRobotDetails(false);
+
     setLayout(getEffectiveLayout());
     setLayoutVersion((v) => v + 1);
   };
@@ -136,7 +142,7 @@ function App() {
 
   function handleRelocate({ id, x, y, zone }) {
     setMachinePosition({ zone, id, x, y });
-    setLayout(getEffectiveLayout()); // reflete posição se necessário (se lista exibir coords)
+    setLayout(getEffectiveLayout()); // reflete posição se necessário
     setLayoutVersion((v) => v + 1);
     setMoveMode(false);
   }
@@ -151,9 +157,7 @@ function App() {
   // Abre o modal de confirmação
   function handleRemoveMachine(id) {
     if (!isOverlayMachine(selectedZone, id)) {
-      alert(
-        "This machine is part of the base layout and cannot be removed here."
-      );
+      alert("This machine is part of the base layout and cannot be removed here.");
       return;
     }
     setConfirmRemoveId(id);
@@ -165,6 +169,7 @@ function App() {
     const removed = removeMachineFromLayout(selectedZone, confirmRemoveId);
     if (removed && selectedMachine === confirmRemoveId) {
       setSelectedMachine(null);
+      setShowRobotDetails(false);
     }
     setLayout(getEffectiveLayout());
     setLayoutVersion((v) => v + 1);
@@ -212,10 +217,7 @@ function App() {
             marginBottom: "8px",
           }}
         >
-          <ZoneSelector
-            selectedZone={selectedZone}
-            onChangeZone={handleZoneChange}
-          />
+          <ZoneSelector selectedZone={selectedZone} onChangeZone={handleZoneChange} />
 
           <button
             type="button"
@@ -237,7 +239,6 @@ function App() {
           >
             ⚙️
           </button>
-
         </div>
 
         {zoneErrors.length > 0 && (
@@ -247,15 +248,11 @@ function App() {
                 ⚠️
               </span>
               <span className="alert__text">
-                <strong>Orion:</strong> {zoneErrors.length} machine(s) without
-                data
+                <strong>Orion:</strong> {zoneErrors.length} machine(s) without data
               </span>
             </div>
             <div className="alert__actions">
-              <button
-                className="btn btn--solid btn--sm"
-                onClick={() => zoneErrors.forEach(fetchAndSetMachineData)}
-              >
+              <button className="btn btn--solid btn--sm" onClick={() => zoneErrors.forEach(fetchAndSetMachineData)}>
                 Retry
               </button>
             </div>
@@ -278,6 +275,7 @@ function App() {
 
           {selectedMachine && (
             <MachineDetails
+              onOpenRobotDetails={() => setShowRobotDetails(true)}
               machineId={selectedMachine}
               data={machineData[selectedMachine] || null}
               loading={reqState[selectedMachine]?.loading}
@@ -291,21 +289,25 @@ function App() {
 
       {/* Add machine */}
       <Modal open={openAdd} onClose={() => setOpenAdd(false)}>
-        <AddMachinePanel
-          selectedZone={selectedZone}
-          onEnterPlaceMode={handleEnterPlaceMode}
-        />
+        <AddMachinePanel selectedZone={selectedZone} onEnterPlaceMode={handleEnterPlaceMode} />
       </Modal>
 
       {/* Orion settings */}
-      <Modal
-        open={showOrionSettings}
-        onClose={() => setShowOrionSettings(false)}
-      >
+      <Modal open={showOrionSettings} onClose={() => setShowOrionSettings(false)}>
         <div style={{ minWidth: "420px", maxWidth: "520px" }}>
           <OrionSettingsPanel zoneId={selectedZone} />
         </div>
       </Modal>
+
+      {/* Robot details */}
+      <FullScreenModal open={showRobotDetails} onClose={() => setShowRobotDetails(false)}>
+              <RobotDetailsModal
+              machineId={selectedMachine}
+              machineData={selectedMachine ? machineData[selectedMachine] : null}
+              orionConfig={orionConfigForZone}
+              onClose={() => setShowRobotDetails(false)}
+        />
+      </FullScreenModal>
 
       {/* Confirm remove */}
       <ConfirmDialog

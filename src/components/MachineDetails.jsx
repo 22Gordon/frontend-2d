@@ -59,6 +59,9 @@ const ORDER = [
   "distance",
 ];
 
+// ✅ moved outside component (fixes react-hooks/exhaustive-deps warning)
+const EXCLUDED = new Set(["TimeInstant", "config", "device_info"]);
+
 /* Nº profissional: separador de milhar e casas decimais “inteligentes” */
 function fmtNumber(n, { max = 2 } = {}) {
   return new Intl.NumberFormat(undefined, {
@@ -110,17 +113,17 @@ export default function MachineDetails({
   loading = false,
   error = null,
   onRetry,
+  onOpenRobotDetails,
   Spinner,
-  sticky = false, // <-- podes passar sticky={true} se quiseres “colar” o card
+  sticky = false,
 }) {
-  // HOOKS no topo
-  const excluded = new Set(["TimeInstant", "config", "device_info"]);
-
   const entries = useMemo(() => {
     if (!data) return [];
+
     const arr = Object.entries(data).filter(
-      ([k, v]) => !excluded.has(k) && v?.value !== undefined
+      ([k, v]) => !EXCLUDED.has(k) && v?.value !== undefined
     );
+
     // ordenação estável: os não listados em ORDER vão para o fim por ordem alfabética
     return arr.sort((a, b) => {
       const ia = ORDER.indexOf(a[0]);
@@ -134,7 +137,9 @@ export default function MachineDetails({
 
   const timestamp = data?.TimeInstant?.value ?? null;
 
-  // Renders condicionais
+  // helper: mostrar botão só quando faz sentido
+  const canOpenDetails = !!machineId && typeof onOpenRobotDetails === "function";
+
   if (!machineId) {
     return (
       <div className={`md-card ${sticky ? "md-sticky" : ""}`}>
@@ -168,11 +173,19 @@ export default function MachineDetails({
       >
         <div className="md-state-icon md-state-icon--error">!</div>
         <div className="md-state-text">Couldn’t load data: {error}</div>
-        {onRetry && (
-          <button className="btn btn--solid md-retry" onClick={onRetry}>
-            Try again
-          </button>
-        )}
+
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          {onRetry && (
+            <button className="btn btn--solid md-retry" onClick={onRetry}>
+              Try again
+            </button>
+          )}
+          {canOpenDetails && (
+            <button className="btn md-retry" onClick={onOpenRobotDetails}>
+              Open robot details
+            </button>
+          )}
+        </div>
       </div>
     );
   }
@@ -182,19 +195,49 @@ export default function MachineDetails({
       <div className={`md-card md-state ${sticky ? "md-sticky" : ""}`}>
         <div className="md-state-icon">ℹ️</div>
         <div className="md-state-text">No data yet.</div>
-        {onRetry && (
-          <button className="btn md-retry" onClick={onRetry}>
-            Refresh
-          </button>
-        )}
+
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          {onRetry && (
+            <button className="btn md-retry" onClick={onRetry}>
+              Refresh
+            </button>
+          )}
+          {canOpenDetails && (
+            <button className="btn md-retry" onClick={onOpenRobotDetails}>
+              Open robot details
+            </button>
+          )}
+        </div>
       </div>
     );
   }
 
-  // Dados OK
   return (
     <div className={`md-card ${sticky ? "md-sticky" : ""}`}>
-      <h2 className="md-title">Machine {machineId}</h2>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10,
+          marginBottom: 8,
+        }}
+      >
+        <h2 className="md-title" style={{ margin: 0 }}>
+          Machine {machineId}
+        </h2>
+
+        {canOpenDetails && (
+          <button
+            type="button"
+            className="btn btn--solid btn--sm"
+            onClick={onOpenRobotDetails}
+            title="Open robot details (tasks, status and metrics)"
+          >
+            Open robot details
+          </button>
+        )}
+      </div>
 
       <div className="md-grid" role="table" aria-label="Machine metrics">
         {entries.map(([key, attr]) => (
