@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { listTasksFromOrion, deleteTaskFromOrion } from "../services/orionClientTasks";
+import {
+  listTasksFromOrion,
+  deleteTaskFromOrion,
+} from "../services/orionClientTasks";
+import { listPointsFromOrion } from "../services/orionClientPoints";
+import { createTaskRequestInOrion } from "../services/orionClientTaskRequests";
 
 const ORCHESTRATOR_URL =
   import.meta.env?.VITE_ORCHESTRATOR_URL || "http://localhost:3005";
@@ -45,8 +50,19 @@ export default function RobotDetailsModal({
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [taskError, setTaskError] = useState(null);
   const [busyExecute, setBusyExecute] = useState(false);
-
   const [removingId, setRemovingId] = useState(null);
+
+  // ✅ Points + create TaskRequest
+  const [points, setPoints] = useState([]);
+  const [loadingPoints, setLoadingPoints] = useState(false);
+  const [pointsError, setPointsError] = useState(null);
+  const [pickPointId, setPickPointId] = useState("");
+  const [placePointId, setPlacePointId] = useState("");
+  const [busyCreate, setBusyCreate] = useState(false);
+
+  // ✅ NEW: help Orion eventual consistency feel instant
+  const [fastPollUntil, setFastPollUntil] = useState(0);
+  const [tasksRefreshToken, setTasksRefreshToken] = useState(0);
 
   const selectedTask = useMemo(
     () => tasks.find((t) => t.id === selectedTaskId) || null,
@@ -58,38 +74,86 @@ export default function RobotDetailsModal({
     [tasks]
   );
 
-  // fetch tasks + polling (faster when executing)
+  // ✅ load points for dropdowns
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPoints() {
+      if (!robotNgsiId) return;
+
+      try {
+        setLoadingPoints(true);
+        setPointsError(null);
+
+        const pts = await listPointsFromOrion(orionConfig, {
+          robotId: robotNgsiId,
+          limit: 200,
+        });
+
+        if (cancelled) return;
+
+        setPoints(pts);
+
+        // sensible defaults
+        if (!pickPointId) {
+          const defPick =
+            pts.find((p) => p.id === "Point:PICK_A") ||
+            pts.find((p) => p.id === "Point:HOME") ||
+            pts[0];
+          if (defPick?.id) setPickPointId(defPick.id);
+        }
+
+        if (!placePointId) {
+          const defPlace =
+            pts.find((p) => p.id === "Point:PLACE_B") ||
+            pts.find((p) => p.id === "Point:SAFE") ||
+            pts[0];
+          if (defPlace?.id) setPlacePointId(defPlace.id);
+        }
+      } catch (e) {
+        if (!cancelled) setPointsError(e?.message || "Failed to load points");
+      } finally {
+        if (!cancelled) setLoadingPoints(false);
+      }
+    }
+
+    loadPoints();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orionConfig, robotNgsiId]);
+
+  // ✅ fetch tasks + polling (fast when executing OR right after creation)
   useEffect(() => {
     let timer = null;
     let cancelled = false;
 
-    async function load() {
+    async function loadOnce() {
       if (!robotNgsiId) return;
 
       try {
-        // ✅ show overlay only on first load (avoid UI "jump" during polling)
+        // show overlay only on first load (avoid UI "jump" during polling)
         setLoadingTasks((prev) => (tasks.length === 0 ? true : prev));
         setTaskError(null);
 
         const all = await listTasksFromOrion(orionConfig, { limit: 30 });
 
-        const filtered = all.filter(
-          (t) => !robotNgsiId || t.robotId === robotNgsiId
-        );
+        const filtered = all
+          .filter((t) => !robotNgsiId || t.robotId === robotNgsiId)
+          .sort((a, b) =>
+            String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
+          );
 
-        filtered.sort((a, b) =>
-          String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
-        );
+        if (cancelled) return;
 
-        if (!cancelled) {
-          setTasks(filtered);
-          setLoadingTasks(false);
+        setTasks(filtered);
+        setLoadingTasks(false);
 
-          if (!selectedTaskId && filtered[0]?.id) setSelectedTaskId(filtered[0].id);
+        if (!selectedTaskId && filtered[0]?.id) setSelectedTaskId(filtered[0].id);
 
-          if (selectedTaskId && !filtered.some((t) => t.id === selectedTaskId)) {
-            setSelectedTaskId(filtered[0]?.id || null);
-          }
+        if (selectedTaskId && !filtered.some((t) => t.id === selectedTaskId)) {
+          setSelectedTaskId(filtered[0]?.id || null);
         }
       } catch (e) {
         if (!cancelled) {
@@ -99,17 +163,27 @@ export default function RobotDetailsModal({
       }
     }
 
-    load();
+    loadOnce();
 
-    const intervalMs = isRunning ? 1000 : 4000;
-    timer = setInterval(load, intervalMs);
+    const now = Date.now();
+    const shouldFastPoll = isRunning || now < fastPollUntil;
+    const intervalMs = shouldFastPoll ? 1000 : 4000;
+
+    timer = setInterval(loadOnce, intervalMs);
 
     return () => {
       cancelled = true;
       if (timer) clearInterval(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orionConfig, robotNgsiId, isRunning, selectedTaskId]);
+  }, [
+    orionConfig,
+    robotNgsiId,
+    isRunning,
+    selectedTaskId,
+    fastPollUntil,
+    tasksRefreshToken,
+  ]);
 
   const headerStatus = isRunning ? "Running" : "Idle";
 
@@ -122,6 +196,40 @@ export default function RobotDetailsModal({
       alert(e?.message || "Execute failed");
     } finally {
       setBusyExecute(false);
+    }
+  }
+
+  async function onCreateTaskRequest() {
+    if (!robotNgsiId) {
+      alert("No robot mapping available.");
+      return;
+    }
+    if (!pickPointId || !placePointId) {
+      alert("Select both Pick and Place points.");
+      return;
+    }
+    if (pickPointId === placePointId) {
+      alert("Pick and Place must be different.");
+      return;
+    }
+
+    try {
+      setBusyCreate(true);
+
+      await createTaskRequestInOrion(orionConfig, {
+        robotId: robotNgsiId,
+        processId: "Process:pickplace-01",
+        pickPointId,
+        placePointId,
+      });
+
+      // ✅ feels instant: refresh now + poll faster for a few seconds
+      setTasksRefreshToken((v) => v + 1);
+      setFastPollUntil(Date.now() + 10_000);
+    } catch (e) {
+      alert(e?.message || "Failed to create TaskRequest");
+    } finally {
+      setBusyCreate(false);
     }
   }
 
@@ -163,12 +271,26 @@ export default function RobotDetailsModal({
       }}
     >
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 12,
+        }}
+      >
         <div style={{ fontWeight: 800, fontSize: 16 }}>
           Robotic Arm – Digital Twin Dashboard
         </div>
 
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+        <div
+          style={{
+            marginLeft: "auto",
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
           <div style={{ fontSize: 13, color: "#334155" }}>
             Robot: <strong>{machineId}</strong>{" "}
             <span
@@ -202,7 +324,7 @@ export default function RobotDetailsModal({
           display: "grid",
           gridTemplateColumns: "320px 1fr 280px",
           gap: 12,
-          height: "70vh", // ✅ fills modal space; avoids big white bottom
+          height: "70vh",
           alignItems: "stretch",
         }}
       >
@@ -218,10 +340,140 @@ export default function RobotDetailsModal({
             overflow: "hidden",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+          <div
+            style={{ display: "flex", alignItems: "center", marginBottom: 10 }}
+          >
             <div style={{ fontWeight: 800 }}>Tasks</div>
-            <div style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>
+            <div
+              style={{
+                marginLeft: "auto",
+                fontSize: 12,
+                color: "#64748b",
+              }}
+            >
               {robotNgsiId ? robotNgsiId : "No robot mapping"}
+            </div>
+          </div>
+
+          {/* Create TaskRequest */}
+          <div
+            style={{
+              border: "1px solid rgba(0,0,0,0.08)",
+              borderRadius: 12,
+              padding: 10,
+              background: "rgba(15,23,42,0.02)",
+              marginBottom: 10,
+            }}
+          >
+            <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 8 }}>
+              Create Pick &amp; Place
+            </div>
+
+            {pointsError && (
+              <div
+                style={{
+                  fontSize: 12,
+                  color: "#dc2626",
+                  marginBottom: 6,
+                }}
+              >
+                {pointsError}
+              </div>
+            )}
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+              <label style={{ fontSize: 12, color: "#64748b" }}>
+                Pick point
+                <select
+                  value={pickPointId}
+                  onChange={(e) => setPickPointId(e.target.value)}
+                  disabled={loadingPoints || points.length === 0}
+                  style={{
+                    marginTop: 4,
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(0,0,0,0.10)",
+                    background: "white",
+                  }}
+                >
+                  {points.length === 0 ? (
+                    <option value="">
+                      {loadingPoints ? "Loading..." : "No points found"}
+                    </option>
+                  ) : (
+                    points.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label || p.id}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+
+              <label style={{ fontSize: 12, color: "#64748b" }}>
+                Place point
+                <select
+                  value={placePointId}
+                  onChange={(e) => setPlacePointId(e.target.value)}
+                  disabled={loadingPoints || points.length === 0}
+                  style={{
+                    marginTop: 4,
+                    width: "100%",
+                    padding: "8px 10px",
+                    borderRadius: 10,
+                    border: "1px solid rgba(0,0,0,0.10)",
+                    background: "white",
+                  }}
+                >
+                  {points.length === 0 ? (
+                    <option value="">
+                      {loadingPoints ? "Loading..." : "No points found"}
+                    </option>
+                  ) : (
+                    points.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.label || p.id}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+
+              <button
+                type="button"
+                onClick={onCreateTaskRequest}
+                disabled={
+                  busyCreate ||
+                  loadingPoints ||
+                  points.length === 0 ||
+                  !robotNgsiId
+                }
+                style={{
+                  width: "100%",
+                  borderRadius: 12,
+                  padding: "10px 12px",
+                  border: "1px solid rgba(0,0,0,0.08)",
+                  background: "#3b82f6",
+                  color: "white",
+                  cursor: busyCreate ? "wait" : "pointer",
+                  fontWeight: 800,
+                  opacity:
+                    busyCreate ||
+                    loadingPoints ||
+                    points.length === 0 ||
+                    !robotNgsiId
+                      ? 0.7
+                      : 1,
+                }}
+              >
+                {busyCreate ? "Creating…" : "Create TaskRequest"}
+              </button>
+            </div>
+
+            <div style={{ marginTop: 8, fontSize: 11, color: "#64748b" }}>
+              Creates a <strong>TaskRequest</strong> (pending). Orchestrator will
+              accept and create a Task.
             </div>
           </div>
 
@@ -231,7 +483,7 @@ export default function RobotDetailsModal({
             </div>
           )}
 
-          {/* ✅ Scrollable list + loading overlay (Option A) */}
+          {/* Scrollable list + loading overlay */}
           <div
             style={{
               position: "relative",
@@ -265,7 +517,10 @@ export default function RobotDetailsModal({
               {tasks.map((t) => {
                 const active = t.id === selectedTaskId;
                 const label = `${t.pickPointId || "?"} → ${t.placePointId || "?"}`;
-                const progress = Math.max(0, Math.min(100, Number(t.progress || 0)));
+                const progress = Math.max(
+                  0,
+                  Math.min(100, Number(t.progress || 0))
+                );
                 const isRemoving = removingId === t.id;
 
                 return (
@@ -304,7 +559,9 @@ export default function RobotDetailsModal({
                           gap: 10,
                         }}
                       >
-                        <div style={{ fontSize: 12, color: "#64748b" }}>{t.status}</div>
+                        <div style={{ fontSize: 12, color: "#64748b" }}>
+                          {t.status}
+                        </div>
 
                         <button
                           type="button"
@@ -323,7 +580,8 @@ export default function RobotDetailsModal({
                             background: "white",
                             borderRadius: 10,
                             padding: "6px 10px",
-                            cursor: t.status === "executing" ? "not-allowed" : "pointer",
+                            cursor:
+                              t.status === "executing" ? "not-allowed" : "pointer",
                             fontSize: 12,
                             fontWeight: 800,
                             color: "#dc2626",
@@ -369,16 +627,21 @@ export default function RobotDetailsModal({
           <div style={{ marginTop: 12 }}>
             <button
               onClick={onExecuteSelected}
-              disabled={!selectedTask || selectedTask.status !== "queued" || busyExecute}
+              disabled={
+                !selectedTask || selectedTask.status !== "queued" || busyExecute
+              }
               style={{
                 width: "100%",
                 borderRadius: 12,
                 padding: "10px 12px",
                 border: "1px solid rgba(0,0,0,0.08)",
                 background:
-                  selectedTask?.status === "queued" ? "#16a34a" : "rgba(15,23,42,0.06)",
+                  selectedTask?.status === "queued"
+                    ? "#16a34a"
+                    : "rgba(15,23,42,0.06)",
                 color: selectedTask?.status === "queued" ? "white" : "#64748b",
-                cursor: selectedTask?.status === "queued" ? "pointer" : "not-allowed",
+                cursor:
+                  selectedTask?.status === "queued" ? "pointer" : "not-allowed",
                 fontWeight: 800,
               }}
               title={
@@ -408,7 +671,7 @@ export default function RobotDetailsModal({
 
           <div
             style={{
-              flex: 1, // ✅ fill available space
+              flex: 1,
               borderRadius: 14,
               background: "rgba(15,23,42,0.04)",
               display: "flex",
@@ -422,7 +685,8 @@ export default function RobotDetailsModal({
           >
             Placeholder for simulation/robot visualization (Unity/stream).
             <br />
-            For now, the Digital Twin execution is reflected via NGSI task states and progress.
+            For now, the Digital Twin execution is reflected via NGSI task states
+            and progress.
           </div>
         </div>
 
