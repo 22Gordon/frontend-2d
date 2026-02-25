@@ -34,6 +34,18 @@ async function executeTask(taskId) {
   return json;
 }
 
+function safeNumber(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function formatStep(step) {
+  if (!step) return "—";
+  const action = step.action || "move";
+  const pointId = step.pointId || "—";
+  return `${action} → ${pointId}`;
+}
+
 export default function RobotDetailsModal({
   machineId,
   machineData,
@@ -52,7 +64,7 @@ export default function RobotDetailsModal({
   const [busyExecute, setBusyExecute] = useState(false);
   const [removingId, setRemovingId] = useState(null);
 
-  // ✅ Points + create TaskRequest
+  // Points + create TaskRequest
   const [points, setPoints] = useState([]);
   const [loadingPoints, setLoadingPoints] = useState(false);
   const [pointsError, setPointsError] = useState(null);
@@ -60,7 +72,7 @@ export default function RobotDetailsModal({
   const [placePointId, setPlacePointId] = useState("");
   const [busyCreate, setBusyCreate] = useState(false);
 
-  // ✅ NEW: help Orion eventual consistency feel instant
+  // help Orion eventual consistency feel instant
   const [fastPollUntil, setFastPollUntil] = useState(0);
   const [tasksRefreshToken, setTasksRefreshToken] = useState(0);
 
@@ -74,7 +86,37 @@ export default function RobotDetailsModal({
     [tasks]
   );
 
-  // ✅ load points for dropdowns
+  // ---- NEW: derive step UI info (works with and without steps) ----
+  const stepInfo = useMemo(() => {
+    if (!selectedTask) return null;
+
+    const stepsArr = Array.isArray(selectedTask.steps) ? selectedTask.steps : [];
+    const totalFromArr = stepsArr.length;
+
+    // prefer explicit totalSteps if it exists
+    const totalSteps = safeNumber(
+      selectedTask.totalSteps,
+      totalFromArr > 0 ? totalFromArr : 0
+    );
+
+    const idx0 = safeNumber(selectedTask.currentStepIndex, 0);
+    const idx1 = totalSteps > 0 ? Math.min(totalSteps, Math.max(1, idx0 + 1)) : 0;
+
+    const currentStep =
+      selectedTask.currentStep ||
+      (totalFromArr > 0 ? stepsArr[Math.min(idx0, totalFromArr - 1)] : null);
+
+    return {
+      hasSteps: totalSteps > 0 || totalFromArr > 0,
+      idx0,
+      idx1,
+      total: totalSteps || totalFromArr || 0,
+      currentStep,
+      currentStepLabel: formatStep(currentStep),
+    };
+  }, [selectedTask]);
+
+  // load points for dropdowns
   useEffect(() => {
     let cancelled = false;
 
@@ -124,7 +166,7 @@ export default function RobotDetailsModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orionConfig, robotNgsiId]);
 
-  // ✅ fetch tasks + polling (fast when executing OR right after creation)
+  // fetch tasks + polling (fast when executing OR right after creation)
   useEffect(() => {
     let timer = null;
     let cancelled = false;
@@ -133,7 +175,6 @@ export default function RobotDetailsModal({
       if (!robotNgsiId) return;
 
       try {
-        // show overlay only on first load (avoid UI "jump" during polling)
         setLoadingTasks((prev) => (tasks.length === 0 ? true : prev));
         setTaskError(null);
 
@@ -223,7 +264,7 @@ export default function RobotDetailsModal({
         placePointId,
       });
 
-      // ✅ feels instant: refresh now + poll faster for a few seconds
+      // feels instant: refresh now + poll faster for a few seconds
       setTasksRefreshToken((v) => v + 1);
       setFastPollUntil(Date.now() + 10_000);
     } catch (e) {
@@ -340,17 +381,9 @@ export default function RobotDetailsModal({
             overflow: "hidden",
           }}
         >
-          <div
-            style={{ display: "flex", alignItems: "center", marginBottom: 10 }}
-          >
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
             <div style={{ fontWeight: 800 }}>Tasks</div>
-            <div
-              style={{
-                marginLeft: "auto",
-                fontSize: 12,
-                color: "#64748b",
-              }}
-            >
+            <div style={{ marginLeft: "auto", fontSize: 12, color: "#64748b" }}>
               {robotNgsiId ? robotNgsiId : "No robot mapping"}
             </div>
           </div>
@@ -370,13 +403,7 @@ export default function RobotDetailsModal({
             </div>
 
             {pointsError && (
-              <div
-                style={{
-                  fontSize: 12,
-                  color: "#dc2626",
-                  marginBottom: 6,
-                }}
-              >
+              <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 6 }}>
                 {pointsError}
               </div>
             )}
@@ -443,12 +470,7 @@ export default function RobotDetailsModal({
               <button
                 type="button"
                 onClick={onCreateTaskRequest}
-                disabled={
-                  busyCreate ||
-                  loadingPoints ||
-                  points.length === 0 ||
-                  !robotNgsiId
-                }
+                disabled={busyCreate || loadingPoints || points.length === 0 || !robotNgsiId}
                 style={{
                   width: "100%",
                   borderRadius: 12,
@@ -458,13 +480,7 @@ export default function RobotDetailsModal({
                   color: "white",
                   cursor: busyCreate ? "wait" : "pointer",
                   fontWeight: 800,
-                  opacity:
-                    busyCreate ||
-                    loadingPoints ||
-                    points.length === 0 ||
-                    !robotNgsiId
-                      ? 0.7
-                      : 1,
+                  opacity: busyCreate || loadingPoints || points.length === 0 || !robotNgsiId ? 0.7 : 1,
                 }}
               >
                 {busyCreate ? "Creating…" : "Create TaskRequest"}
@@ -472,8 +488,8 @@ export default function RobotDetailsModal({
             </div>
 
             <div style={{ marginTop: 8, fontSize: 11, color: "#64748b" }}>
-              Creates a <strong>TaskRequest</strong> (pending). Orchestrator will
-              accept and create a Task.
+              Creates a <strong>TaskRequest</strong> (pending). Orchestrator will accept
+              and create a Task.
             </div>
           </div>
 
@@ -517,11 +533,12 @@ export default function RobotDetailsModal({
               {tasks.map((t) => {
                 const active = t.id === selectedTaskId;
                 const label = `${t.pickPointId || "?"} → ${t.placePointId || "?"}`;
-                const progress = Math.max(
-                  0,
-                  Math.min(100, Number(t.progress || 0))
-                );
+                const progress = Math.max(0, Math.min(100, Number(t.progress || 0)));
                 const isRemoving = removingId === t.id;
+
+                const hasSteps = Array.isArray(t.steps) && t.steps.length > 0;
+                const totalSteps = safeNumber(t.totalSteps, hasSteps ? t.steps.length : 0);
+                const currentIdx1 = totalSteps > 0 ? safeNumber(t.currentStepIndex, 0) + 1 : 0;
 
                 return (
                   <button
@@ -531,9 +548,7 @@ export default function RobotDetailsModal({
                       textAlign: "left",
                       borderRadius: 12,
                       padding: "10px 10px",
-                      border: active
-                        ? "2px solid #3b82f6"
-                        : "1px solid rgba(0,0,0,0.08)",
+                      border: active ? "2px solid #3b82f6" : "1px solid rgba(0,0,0,0.08)",
                       background: active ? "rgba(59,130,246,0.08)" : "white",
                       cursor: "pointer",
                       position: "relative",
@@ -551,17 +566,8 @@ export default function RobotDetailsModal({
                       />
                       <div style={{ fontWeight: 700, fontSize: 13 }}>{label}</div>
 
-                      <div
-                        style={{
-                          marginLeft: "auto",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 10,
-                        }}
-                      >
-                        <div style={{ fontSize: 12, color: "#64748b" }}>
-                          {t.status}
-                        </div>
+                      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
+                        <div style={{ fontSize: 12, color: "#64748b" }}>{t.status}</div>
 
                         <button
                           type="button"
@@ -580,8 +586,7 @@ export default function RobotDetailsModal({
                             background: "white",
                             borderRadius: 10,
                             padding: "6px 10px",
-                            cursor:
-                              t.status === "executing" ? "not-allowed" : "pointer",
+                            cursor: t.status === "executing" ? "not-allowed" : "pointer",
                             fontSize: 12,
                             fontWeight: 800,
                             color: "#dc2626",
@@ -592,6 +597,18 @@ export default function RobotDetailsModal({
                         </button>
                       </div>
                     </div>
+
+                    {/* NEW: step badge for selected task */}
+                    {active && totalSteps > 0 && (
+                      <div style={{ marginTop: 6, fontSize: 12, color: "#334155" }}>
+                        <span style={{ color: "#64748b" }}>Step:</span>{" "}
+                        <strong>
+                          {Math.min(totalSteps, Math.max(1, currentIdx1))}/{totalSteps}
+                        </strong>
+                        <span style={{ color: "#64748b" }}> · </span>
+                        <span>{formatStep(t.currentStep || (hasSteps ? t.steps[safeNumber(t.currentStepIndex, 0)] : null))}</span>
+                      </div>
+                    )}
 
                     <div style={{ marginTop: 8 }}>
                       <div
@@ -627,21 +644,16 @@ export default function RobotDetailsModal({
           <div style={{ marginTop: 12 }}>
             <button
               onClick={onExecuteSelected}
-              disabled={
-                !selectedTask || selectedTask.status !== "queued" || busyExecute
-              }
+              disabled={!selectedTask || selectedTask.status !== "queued" || busyExecute}
               style={{
                 width: "100%",
                 borderRadius: 12,
                 padding: "10px 12px",
                 border: "1px solid rgba(0,0,0,0.08)",
                 background:
-                  selectedTask?.status === "queued"
-                    ? "#16a34a"
-                    : "rgba(15,23,42,0.06)",
+                  selectedTask?.status === "queued" ? "#16a34a" : "rgba(15,23,42,0.06)",
                 color: selectedTask?.status === "queued" ? "white" : "#64748b",
-                cursor:
-                  selectedTask?.status === "queued" ? "pointer" : "not-allowed",
+                cursor: selectedTask?.status === "queued" ? "pointer" : "not-allowed",
                 fontWeight: 800,
               }}
               title={
@@ -685,8 +697,7 @@ export default function RobotDetailsModal({
           >
             Placeholder for simulation/robot visualization (Unity/stream).
             <br />
-            For now, the Digital Twin execution is reflected via NGSI task states
-            and progress.
+            For now, the Digital Twin execution is reflected via NGSI task states and progress.
           </div>
         </div>
 
@@ -717,13 +728,45 @@ export default function RobotDetailsModal({
               <span style={{ color: "#64748b" }}>Mode:</span>{" "}
               <strong>{selectedTask?.executor || "—"}</strong>
             </div>
+
             <div>
               <span style={{ color: "#64748b" }}>Current process:</span>{" "}
               <strong>{selectedTask?.processId || "—"}</strong>
             </div>
+
             <div>
               <span style={{ color: "#64748b" }}>Status:</span>{" "}
               <strong>{selectedTask?.status || "—"}</strong>
+            </div>
+
+            {/* NEW: step section */}
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+              <div style={{ fontWeight: 800, marginBottom: 6 }}>Current Step</div>
+
+              {!selectedTask ? (
+                <div style={{ color: "#64748b" }}>—</div>
+              ) : stepInfo?.hasSteps ? (
+                <>
+                  <div>
+                    <span style={{ color: "#64748b" }}>Step:</span>{" "}
+                    <strong>
+                      {stepInfo.idx1}/{stepInfo.total}
+                    </strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b" }}>Action:</span>{" "}
+                    <strong>{stepInfo.currentStep?.action || "move"}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: "#64748b" }}>Target:</span>{" "}
+                    <strong>{stepInfo.currentStep?.pointId || "—"}</strong>
+                  </div>
+                </>
+              ) : (
+                <div style={{ color: "#64748b" }}>
+                  This task has no steps (legacy mode).
+                </div>
+              )}
             </div>
           </div>
 
@@ -748,6 +791,7 @@ export default function RobotDetailsModal({
                   : "—"}
               </strong>
             </div>
+
             <div>
               <span style={{ color: "#64748b" }}>Completed tasks:</span>{" "}
               <strong>{tasks.filter((t) => t.status === "completed").length}</strong>
