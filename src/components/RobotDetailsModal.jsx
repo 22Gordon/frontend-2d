@@ -1,18 +1,21 @@
 import React, { useEffect, useMemo, useState } from "react";
-import {
-  listTasksFromOrion,
-  deleteTaskFromOrion,
-} from "../services/orionClientTasks";
+import { listTasksFromOrion, deleteTaskFromOrion } from "../services/orionClientTasks";
 import { listPointsFromOrion } from "../services/orionClientPoints";
 import { createTaskRequestInOrion } from "../services/orionClientTaskRequests";
 
 const ORCHESTRATOR_URL =
   import.meta.env?.VITE_ORCHESTRATOR_URL || "http://localhost:3005";
 
-function statusColor(status) {
-  if (status === "executing") return "#f59e0b";
-  if (status === "completed") return "#16a34a";
-  if (status === "failed") return "#dc2626";
+function normalizeStatus(s) {
+  if (!s) return "";
+  return String(s).trim().toLowerCase();
+}
+
+function statusColor(statusRaw) {
+  const status = normalizeStatus(statusRaw);
+  if (status === "executing" || status === "running") return "#f59e0b";
+  if (status === "completed" || status === "done") return "#16a34a";
+  if (status === "failed" || status === "error") return "#dc2626";
   return "#64748b";
 }
 
@@ -44,6 +47,18 @@ function formatStep(step) {
   const action = step.action || "move";
   const pointId = step.pointId || "—";
   return `${action} → ${pointId}`;
+}
+
+function getTaskProgressPct(task) {
+  // new model: progressPct
+  // legacy model: progress
+  const v = task?.progressPct ?? task?.progress ?? 0;
+  return Math.max(0, Math.min(100, safeNumber(v, 0)));
+}
+
+function getTaskCreatedAt(task) {
+  // some tasks might not have createdAt
+  return task?.createdAt || task?.requestedAt || task?.acceptedAt || "";
 }
 
 export default function RobotDetailsModal({
@@ -82,25 +97,29 @@ export default function RobotDetailsModal({
   );
 
   const isRunning = useMemo(
-    () => tasks.some((t) => t.status === "executing"),
+    () =>
+      tasks.some((t) => {
+        const s = normalizeStatus(t.status);
+        return s === "executing" || s === "running";
+      }),
     [tasks]
   );
 
-  // ---- NEW: derive step UI info (works with and without steps) ----
+  // ---- derive step UI info (works with and without steps) ----
   const stepInfo = useMemo(() => {
     if (!selectedTask) return null;
 
     const stepsArr = Array.isArray(selectedTask.steps) ? selectedTask.steps : [];
     const totalFromArr = stepsArr.length;
 
-    // prefer explicit totalSteps if it exists
     const totalSteps = safeNumber(
       selectedTask.totalSteps,
       totalFromArr > 0 ? totalFromArr : 0
     );
 
     const idx0 = safeNumber(selectedTask.currentStepIndex, 0);
-    const idx1 = totalSteps > 0 ? Math.min(totalSteps, Math.max(1, idx0 + 1)) : 0;
+    const idx1 =
+      totalSteps > 0 ? Math.min(totalSteps, Math.max(1, idx0 + 1)) : 0;
 
     const currentStep =
       selectedTask.currentStep ||
@@ -178,13 +197,17 @@ export default function RobotDetailsModal({
         setLoadingTasks((prev) => (tasks.length === 0 ? true : prev));
         setTaskError(null);
 
-        const all = await listTasksFromOrion(orionConfig, { limit: 30 });
+        const all = await listTasksFromOrion(orionConfig, { limit: 50 });
 
         const filtered = all
           .filter((t) => !robotNgsiId || t.robotId === robotNgsiId)
-          .sort((a, b) =>
-            String(b.createdAt || "").localeCompare(String(a.createdAt || ""))
-          );
+          .sort((a, b) => {
+            const aa = String(getTaskCreatedAt(a));
+            const bb = String(getTaskCreatedAt(b));
+            if (aa && bb) return bb.localeCompare(aa);
+            // fallback stable sort by id
+            return String(b.id || "").localeCompare(String(a.id || ""));
+          });
 
         if (cancelled) return;
 
@@ -233,6 +256,10 @@ export default function RobotDetailsModal({
     try {
       setBusyExecute(true);
       await executeTask(selectedTask.id);
+
+      // UI feel instant
+      setTasksRefreshToken((v) => v + 1);
+      setFastPollUntil(Date.now() + 10_000);
     } catch (e) {
       alert(e?.message || "Execute failed");
     } finally {
@@ -276,8 +303,9 @@ export default function RobotDetailsModal({
 
   async function handleRemoveTask(taskId) {
     const t = tasks.find((x) => x.id === taskId);
+    const st = normalizeStatus(t?.status);
 
-    if (t?.status === "executing") {
+    if (st === "executing" || st === "running") {
       alert("This task is currently executing. Wait until it finishes.");
       return;
     }
@@ -301,6 +329,11 @@ export default function RobotDetailsModal({
       setRemovingId(null);
     }
   }
+
+  const canExecuteSelected = useMemo(() => {
+    const st = normalizeStatus(selectedTask?.status);
+    return st === "queued" || st === "created";
+  }, [selectedTask]);
 
   return (
     <div
@@ -470,7 +503,9 @@ export default function RobotDetailsModal({
               <button
                 type="button"
                 onClick={onCreateTaskRequest}
-                disabled={busyCreate || loadingPoints || points.length === 0 || !robotNgsiId}
+                disabled={
+                  busyCreate || loadingPoints || points.length === 0 || !robotNgsiId
+                }
                 style={{
                   width: "100%",
                   borderRadius: 12,
@@ -480,7 +515,10 @@ export default function RobotDetailsModal({
                   color: "white",
                   cursor: busyCreate ? "wait" : "pointer",
                   fontWeight: 800,
-                  opacity: busyCreate || loadingPoints || points.length === 0 || !robotNgsiId ? 0.7 : 1,
+                  opacity:
+                    busyCreate || loadingPoints || points.length === 0 || !robotNgsiId
+                      ? 0.7
+                      : 1,
                 }}
               >
                 {busyCreate ? "Creating…" : "Create TaskRequest"}
@@ -533,12 +571,15 @@ export default function RobotDetailsModal({
               {tasks.map((t) => {
                 const active = t.id === selectedTaskId;
                 const label = `${t.pickPointId || "?"} → ${t.placePointId || "?"}`;
-                const progress = Math.max(0, Math.min(100, Number(t.progress || 0)));
+
+                const progress = getTaskProgressPct(t);
                 const isRemoving = removingId === t.id;
 
                 const hasSteps = Array.isArray(t.steps) && t.steps.length > 0;
                 const totalSteps = safeNumber(t.totalSteps, hasSteps ? t.steps.length : 0);
                 const currentIdx1 = totalSteps > 0 ? safeNumber(t.currentStepIndex, 0) + 1 : 0;
+
+                const st = normalizeStatus(t.status);
 
                 return (
                   <button
@@ -548,7 +589,9 @@ export default function RobotDetailsModal({
                       textAlign: "left",
                       borderRadius: 12,
                       padding: "10px 10px",
-                      border: active ? "2px solid #3b82f6" : "1px solid rgba(0,0,0,0.08)",
+                      border: active
+                        ? "2px solid #3b82f6"
+                        : "1px solid rgba(0,0,0,0.08)",
                       background: active ? "rgba(59,130,246,0.08)" : "white",
                       cursor: "pointer",
                       position: "relative",
@@ -560,14 +603,23 @@ export default function RobotDetailsModal({
                           width: 10,
                           height: 10,
                           borderRadius: 99,
-                          background: statusColor(t.status),
+                          background: statusColor(st),
                           display: "inline-block",
                         }}
                       />
                       <div style={{ fontWeight: 700, fontSize: 13 }}>{label}</div>
 
-                      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
-                        <div style={{ fontSize: 12, color: "#64748b" }}>{t.status}</div>
+                      <div
+                        style={{
+                          marginLeft: "auto",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 10,
+                        }}
+                      >
+                        <div style={{ fontSize: 12, color: "#64748b" }}>
+                          {st || "—"}
+                        </div>
 
                         <button
                           type="button"
@@ -575,9 +627,9 @@ export default function RobotDetailsModal({
                             e.stopPropagation();
                             handleRemoveTask(t.id);
                           }}
-                          disabled={isRemoving || t.status === "executing"}
+                          disabled={isRemoving || st === "executing" || st === "running"}
                           title={
-                            t.status === "executing"
+                            st === "executing" || st === "running"
                               ? "Cannot remove while executing"
                               : "Remove task from Orion"
                           }
@@ -586,7 +638,10 @@ export default function RobotDetailsModal({
                             background: "white",
                             borderRadius: 10,
                             padding: "6px 10px",
-                            cursor: t.status === "executing" ? "not-allowed" : "pointer",
+                            cursor:
+                              st === "executing" || st === "running"
+                                ? "not-allowed"
+                                : "pointer",
                             fontSize: 12,
                             fontWeight: 800,
                             color: "#dc2626",
@@ -598,7 +653,7 @@ export default function RobotDetailsModal({
                       </div>
                     </div>
 
-                    {/* NEW: step badge for selected task */}
+                    {/* Step badge for selected task */}
                     {active && totalSteps > 0 && (
                       <div style={{ marginTop: 6, fontSize: 12, color: "#334155" }}>
                         <span style={{ color: "#64748b" }}>Step:</span>{" "}
@@ -606,7 +661,12 @@ export default function RobotDetailsModal({
                           {Math.min(totalSteps, Math.max(1, currentIdx1))}/{totalSteps}
                         </strong>
                         <span style={{ color: "#64748b" }}> · </span>
-                        <span>{formatStep(t.currentStep || (hasSteps ? t.steps[safeNumber(t.currentStepIndex, 0)] : null))}</span>
+                        <span>
+                          {formatStep(
+                            t.currentStep ||
+                              (hasSteps ? t.steps[safeNumber(t.currentStepIndex, 0)] : null)
+                          )}
+                        </span>
                       </div>
                     )}
 
@@ -623,7 +683,8 @@ export default function RobotDetailsModal({
                             height: 8,
                             borderRadius: 99,
                             width: `${progress}%`,
-                            background: statusColor(t.status),
+                            background: statusColor(st),
+                            transition: "width 250ms ease",
                           }}
                         />
                       </div>
@@ -644,23 +705,19 @@ export default function RobotDetailsModal({
           <div style={{ marginTop: 12 }}>
             <button
               onClick={onExecuteSelected}
-              disabled={!selectedTask || selectedTask.status !== "queued" || busyExecute}
+              disabled={!selectedTask || !canExecuteSelected || busyExecute}
               style={{
                 width: "100%",
                 borderRadius: 12,
                 padding: "10px 12px",
                 border: "1px solid rgba(0,0,0,0.08)",
-                background:
-                  selectedTask?.status === "queued" ? "#16a34a" : "rgba(15,23,42,0.06)",
-                color: selectedTask?.status === "queued" ? "white" : "#64748b",
-                cursor: selectedTask?.status === "queued" ? "pointer" : "not-allowed",
+                background: canExecuteSelected ? "#16a34a" : "rgba(15,23,42,0.06)",
+                color: canExecuteSelected ? "white" : "#64748b",
+                cursor: canExecuteSelected ? "pointer" : "not-allowed",
                 fontWeight: 800,
+                opacity: busyExecute ? 0.8 : 1,
               }}
-              title={
-                selectedTask?.status === "queued"
-                  ? "Start execution"
-                  : "Only queued tasks can be executed"
-              }
+              title={canExecuteSelected ? "Start execution" : "Only queued/created tasks can be executed"}
             >
               {busyExecute ? "Starting…" : "Execute"}
             </button>
@@ -736,11 +793,17 @@ export default function RobotDetailsModal({
 
             <div>
               <span style={{ color: "#64748b" }}>Status:</span>{" "}
-              <strong>{selectedTask?.status || "—"}</strong>
+              <strong>{normalizeStatus(selectedTask?.status) || "—"}</strong>
             </div>
 
-            {/* NEW: step section */}
-            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+            {/* Step section */}
+            <div
+              style={{
+                marginTop: 8,
+                paddingTop: 8,
+                borderTop: "1px solid rgba(0,0,0,0.06)",
+              }}
+            >
               <div style={{ fontWeight: 800, marginBottom: 6 }}>Current Step</div>
 
               {!selectedTask ? (
@@ -794,7 +857,17 @@ export default function RobotDetailsModal({
 
             <div>
               <span style={{ color: "#64748b" }}>Completed tasks:</span>{" "}
-              <strong>{tasks.filter((t) => t.status === "completed").length}</strong>
+              <strong>
+                {tasks.filter((t) => {
+                  const st = normalizeStatus(t.status);
+                  return st === "completed" || st === "done";
+                }).length}
+              </strong>
+            </div>
+
+            <div>
+              <span style={{ color: "#64748b" }}>Progress:</span>{" "}
+              <strong>{selectedTask ? `${getTaskProgressPct(selectedTask)}%` : "—"}</strong>
             </div>
           </div>
         </div>
