@@ -9,7 +9,7 @@ function buildHeaders(config = {}) {
     ...config,
   };
 
-  // ✅ Sem Content-Type (especialmente importante para DELETE)
+  // Sem Content-Type (especialmente importante para DELETE)
   const headers = { Accept: "application/json" };
   if (fiwareService) headers["Fiware-Service"] = fiwareService;
   if (fiwareServicePath) headers["Fiware-ServicePath"] = fiwareServicePath;
