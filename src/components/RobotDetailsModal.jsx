@@ -49,8 +49,16 @@ function safeNumber(v, fallback = 0) {
 function formatStep(step) {
   if (!step) return "—";
   const action = step.action || "move";
-  const pointId = step.pointId || "—";
-  return `${action} → ${pointId}`;
+
+  if (action === "move") {
+    return `${action} → ${step.pointId || "—"}`;
+  }
+
+  if (action === "sleep") {
+    return `${action} → ${step.seconds ?? 1}s`;
+  }
+
+  return action;
 }
 
 function getTaskProgressPct(task) {
@@ -63,14 +71,42 @@ function getTaskCreatedAt(task) {
 }
 
 /* -------------------- Advanced builder helpers -------------------- */
+function makeStep(action = "move", extra = {}) {
+  if (action === "move") {
+    return { action: "move", pointId: extra.pointId || "" };
+  }
+  if (action === "grip") {
+    return { action: "grip" };
+  }
+  if (action === "release") {
+    return { action: "release" };
+  }
+  if (action === "sleep") {
+    return { action: "sleep", seconds: extra.seconds ?? 1 };
+  }
+  return { action: "move", pointId: extra.pointId || "" };
+}
+
 function makeMoveStep(pointId) {
-  return { action: "move", pointId };
+  return makeStep("move", { pointId });
 }
 
 function isValidStep(step) {
-  const action = String(step?.action || "").trim();
-  const pointId = String(step?.pointId || "").trim();
-  return action.length > 0 && pointId.length > 0;
+  const action = String(step?.action || "").trim().toLowerCase();
+
+  if (action === "move") {
+    return String(step?.pointId || "").trim().length > 0;
+  }
+
+  if (action === "grip") return true;
+  if (action === "release") return true;
+
+  if (action === "sleep") {
+    const seconds = Number(step?.seconds);
+    return Number.isFinite(seconds) && seconds >= 0;
+  }
+
+  return false;
 }
 
 /* -------------------- UI primitives (inline styles) -------------------- */
@@ -624,7 +660,7 @@ export default function RobotDetailsModal({
   function addStep(afterIdx = null) {
     const fallbackPoint =
       points.find((p) => p.id === "Point:HOME")?.id || points[0]?.id || "";
-    const newStep = makeMoveStep(fallbackPoint);
+    const newStep = makeStep("move", { pointId: fallbackPoint });
 
     setSteps((prev) => {
       const next = [...prev];
@@ -659,6 +695,34 @@ export default function RobotDetailsModal({
     });
   }
 
+  function setStepAction(idx, action) {
+    setSteps((prev) => {
+      const next = [...prev];
+      const fallbackPoint =
+        points.find((p) => p.id === "Point:HOME")?.id || points[0]?.id || "";
+
+      if (action === "move") {
+        next[idx] = makeStep("move", { pointId: fallbackPoint });
+      } else if (action === "grip") {
+        next[idx] = makeStep("grip");
+      } else if (action === "release") {
+        next[idx] = makeStep("release");
+      } else if (action === "sleep") {
+        next[idx] = makeStep("sleep", { seconds: 1 });
+      }
+
+      return next;
+    });
+  }
+
+  function setStepSeconds(idx, seconds) {
+    setSteps((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], seconds: Number(seconds) };
+      return next;
+    });
+  }
+
   function applyPreset(preset) {
     const home = points.find((p) => p.id === "Point:HOME")?.id || "";
     const pick =
@@ -675,7 +739,12 @@ export default function RobotDetailsModal({
 
     if (preset === "pickplace") {
       if (!pick || !place) return alert("Select Pick and Place points.");
-      setSteps([makeMoveStep(pick), makeMoveStep(place)]);
+      setSteps([
+        makeMoveStep(pick),
+        makeStep("grip"),
+        makeMoveStep(place),
+        makeStep("release"),
+      ]);
       setProcessId("Process:pickplace-01");
       return;
     }
@@ -686,7 +755,9 @@ export default function RobotDetailsModal({
       setSteps([
         makeMoveStep(home),
         makeMoveStep(pick),
+        makeStep("grip"),
         makeMoveStep(place),
+        makeStep("release"),
         makeMoveStep(home),
       ]);
       setProcessId("Process:pickplace-01");
@@ -721,17 +792,18 @@ export default function RobotDetailsModal({
       } else {
         const cleaned = steps.filter(isValidStep);
         if (cleaned.length === 0) {
-          alert("Add at least one valid step (move → Point:...).");
+          alert("Add at least one valid step.");
           return;
         }
+
+        const moveSteps = cleaned.filter((s) => s.action === "move");
 
         await createTaskRequestInOrion(orionConfig, {
           robotId: robotNgsiId,
           processId: processId || "Process:custom-01",
           steps: cleaned,
-          pickPointId: cleaned?.[0]?.pointId || pickPointId || "",
-          placePointId:
-            cleaned?.[cleaned.length - 1]?.pointId || placePointId || "",
+          pickPointId: moveSteps?.[0]?.pointId || pickPointId || "",
+          placePointId: moveSteps?.[1]?.pointId || moveSteps?.[moveSteps.length - 1]?.pointId || placePointId || "",
         });
       }
 
@@ -836,7 +908,7 @@ export default function RobotDetailsModal({
               <div>
                 <div style={ui.cardTitle}>Create TaskRequest</div>
                 <div style={{ ...ui.subtle, marginTop: 2 }}>
-                  Simple = pick/place · Advanced = steps (multi-step)
+                  Simple = pick/place · Advanced = explicit steps
                 </div>
               </div>
 
@@ -923,14 +995,14 @@ export default function RobotDetailsModal({
                     onClick={() => applyPreset("pickplace")}
                     style={ui.chip()}
                   >
-                    Pick → Place
+                    Pick → Grip → Place → Release
                   </button>
                   <button
                     type="button"
                     onClick={() => applyPreset("home_pick_place_home")}
                     style={ui.chip()}
                   >
-                    HOME → Pick → Place → HOME
+                    HOME → Pick → Grip → Place → Release → HOME
                   </button>
 
                   <button
@@ -975,12 +1047,12 @@ export default function RobotDetailsModal({
                 <div style={ui.stepList}>
                   {steps.length === 0 ? (
                     <div style={{ padding: 12, ...ui.subtle }}>
-                      No steps yet. Add one (move → Point:...).
+                      No steps yet. Add move, grip, release or sleep.
                     </div>
                   ) : (
                     steps.map((st, idx) => (
                       <div
-                        key={`${idx}-${st.pointId || "x"}`}
+                        key={`${idx}-${st.action || "x"}-${st.pointId || "nopoint"}`}
                         style={{
                           ...ui.stepRow,
                           borderBottom:
@@ -992,33 +1064,63 @@ export default function RobotDetailsModal({
                         <div style={ui.stepIndex}>{idx + 1}</div>
 
                         <div style={{ display: "grid", gridTemplateColumns: "86px 1fr", gap: 8 }}>
-                          <input
-                            value="move"
-                            disabled
-                            style={{
-                              ...ui.input,
-                              background: "rgba(15,23,42,0.03)",
-                              fontWeight: 950,
-                            }}
-                          />
                           <select
-                            value={st.pointId || ""}
-                            onChange={(e) => setStepPoint(idx, e.target.value)}
-                            disabled={loadingPoints || points.length === 0}
+                            value={st.action || "move"}
+                            onChange={(e) => setStepAction(idx, e.target.value)}
                             style={ui.select}
                           >
-                            {points.length === 0 ? (
-                              <option value="">
-                                {loadingPoints ? "Loading..." : "No points found"}
-                              </option>
-                            ) : (
-                              points.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.label || p.id}
-                                </option>
-                              ))
-                            )}
+                            <option value="move">move</option>
+                            <option value="grip">grip</option>
+                            <option value="release">release</option>
+                            <option value="sleep">sleep</option>
                           </select>
+
+                          {st.action === "move" && (
+                            <select
+                              value={st.pointId || ""}
+                              onChange={(e) => setStepPoint(idx, e.target.value)}
+                              disabled={loadingPoints || points.length === 0}
+                              style={ui.select}
+                            >
+                              {points.length === 0 ? (
+                                <option value="">
+                                  {loadingPoints ? "Loading..." : "No points found"}
+                                </option>
+                              ) : (
+                                points.map((p) => (
+                                  <option key={p.id} value={p.id}>
+                                    {p.label || p.id}
+                                  </option>
+                                ))
+                              )}
+                            </select>
+                          )}
+
+                          {st.action === "sleep" && (
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.1"
+                              value={st.seconds ?? 1}
+                              onChange={(e) => setStepSeconds(idx, e.target.value)}
+                              style={ui.input}
+                              placeholder="Seconds"
+                            />
+                          )}
+
+                          {(st.action === "grip" || st.action === "release") && (
+                            <div
+                              style={{
+                                ...ui.input,
+                                display: "flex",
+                                alignItems: "center",
+                                color: "#64748b",
+                                background: "rgba(15,23,42,0.03)",
+                              }}
+                            >
+                              Uses backend defaults
+                            </div>
+                          )}
                         </div>
 
                         <div style={ui.stepActions}>
@@ -1055,7 +1157,8 @@ export default function RobotDetailsModal({
                 </div>
 
                 <div style={{ ...ui.subtle, lineHeight: 1.35 }}>
-                  The <strong>steps[]</strong> list is the source of truth (multi-step execution).
+                  The <strong>steps[]</strong> list is the source of truth.
+                  Grip/release currently use backend defaults.
                 </div>
               </div>
             )}
@@ -1087,9 +1190,8 @@ export default function RobotDetailsModal({
                 const hasSteps = Array.isArray(t.steps) && t.steps.length > 0;
 
                 const label = hasSteps
-                  ? `${t.steps?.[0]?.pointId || "?"} → ${
-                      t.steps?.[t.steps.length - 1]?.pointId || "?"
-                    }`
+                  ? formatStep(t.steps?.[0]) +
+                    (t.steps.length > 1 ? ` → ${formatStep(t.steps?.[t.steps.length - 1])}` : "")
                   : `${t.pickPointId || "?"} → ${t.placePointId || "?"}`;
 
                 const progress = getTaskProgressPct(t);
@@ -1280,7 +1382,13 @@ export default function RobotDetailsModal({
                   </div>
                   <div>
                     <span style={ui.k}>Target:</span>{" "}
-                    <strong>{stepInfo.currentStep?.pointId || "—"}</strong>
+                    <strong>
+                      {stepInfo.currentStep?.action === "move"
+                        ? stepInfo.currentStep?.pointId || "—"
+                        : stepInfo.currentStep?.action === "sleep"
+                        ? `${stepInfo.currentStep?.seconds ?? 1}s`
+                        : "Uses backend defaults"}
+                    </strong>
                   </div>
                 </>
               ) : (
