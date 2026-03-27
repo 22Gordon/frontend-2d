@@ -9,6 +9,9 @@ import { createTaskRequestInOrion } from "../services/orionClientTaskRequests";
 const ORCHESTRATOR_URL =
   import.meta.env?.VITE_ORCHESTRATOR_URL || "http://localhost:3005";
 
+const CAMERA_URL = import.meta.env?.VITE_CAMERA_URL || "";
+const SAVED_PROCESSES_KEY = "robot_saved_processes_v1";
+
 /* -------------------- small utils -------------------- */
 function normalizeStatus(s) {
   if (!s) return "";
@@ -24,10 +27,34 @@ function statusColor(statusRaw) {
 }
 
 function inferRobotNgsiId(machineId, machineData) {
-  const maybe = machineData?.robotId || machineData?.id;
-  if (typeof maybe === "string" && maybe.startsWith("Robot:")) return maybe;
+  const maybeRobotId = machineData?.robotId;
+  const maybeEntityId = machineData?.id;
 
-  if ((machineId || "").toLowerCase().includes("braco")) return "Robot:ur5e-01";
+  if (
+    typeof maybeRobotId === "string" &&
+    maybeRobotId.startsWith("RoboticArm:")
+  ) {
+    return maybeRobotId;
+  }
+
+  if (
+    typeof maybeEntityId === "string" &&
+    maybeEntityId.startsWith("RoboticArm:")
+  ) {
+    return maybeEntityId;
+  }
+
+  if (
+    typeof maybeRobotId === "string" &&
+    maybeRobotId.startsWith("Robot:")
+  ) {
+    return maybeRobotId;
+  }
+
+  if ((machineId || "").toLowerCase().includes("braco")) {
+    return "RoboticArm:braco001";
+  }
+
   return null;
 }
 
@@ -38,6 +65,19 @@ async function executeTask(taskId) {
   );
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(json?.error || "Failed to execute task");
+  return json;
+}
+
+async function deletePointViaOrchestrator(pointId) {
+  const res = await fetch(
+    `${ORCHESTRATOR_URL}/points/${encodeURIComponent(pointId)}`,
+    { method: "DELETE" }
+  );
+
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(json?.error || "Failed to remove point");
+  }
   return json;
 }
 
@@ -61,6 +101,26 @@ function formatStep(step) {
   return action;
 }
 
+function getPointDisplayName(pointId, points) {
+  if (!pointId) return "—";
+  return points.find((p) => p.id === pointId)?.label || pointId;
+}
+
+function formatStepWithPoints(step, points) {
+  if (!step) return "—";
+  const action = step.action || "move";
+
+  if (action === "move") {
+    return `${action} → ${getPointDisplayName(step.pointId, points)}`;
+  }
+
+  if (action === "sleep") {
+    return `${action} → ${step.seconds ?? 1}s`;
+  }
+
+  return action;
+}
+
 function getTaskProgressPct(task) {
   const v = task?.progressPct ?? task?.progress ?? 0;
   return Math.max(0, Math.min(100, safeNumber(v, 0)));
@@ -68,6 +128,33 @@ function getTaskProgressPct(task) {
 
 function getTaskCreatedAt(task) {
   return task?.createdAt || task?.requestedAt || task?.acceptedAt || "";
+}
+
+function loadSavedProcessesFromStorage() {
+  try {
+    const raw = window.localStorage.getItem(SAVED_PROCESSES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistSavedProcessesToStorage(processes) {
+  window.localStorage.setItem(SAVED_PROCESSES_KEY, JSON.stringify(processes));
+}
+
+function cloneSteps(steps) {
+  return Array.isArray(steps) ? steps.map((s) => ({ ...s })) : [];
+}
+
+function expandStepsByCount(steps, count) {
+  const n = Math.max(1, Math.min(100, Number(count) || 1));
+  const out = [];
+  for (let i = 0; i < n; i += 1) {
+    out.push(...cloneSteps(steps));
+  }
+  return out;
 }
 
 /* -------------------- Advanced builder helpers -------------------- */
@@ -186,6 +273,17 @@ const ui = {
     background: "rgba(255,255,255,0.85)",
     borderRadius: 14,
     padding: "8px 10px",
+    cursor: "pointer",
+    fontWeight: 950,
+    fontSize: 12,
+    color: "#0f172a",
+  },
+
+  topActionBtn: {
+    border: "1px solid rgba(0,0,0,0.08)",
+    background: "rgba(255,255,255,0.85)",
+    borderRadius: 14,
+    padding: "8px 12px",
     cursor: "pointer",
     fontWeight: 950,
     fontSize: 12,
@@ -436,7 +534,205 @@ const ui = {
     gap: 8,
   },
   k: { color: "#64748b" },
+
+  modalBackdrop: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(15,23,42,0.34)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    zIndex: 50,
+  },
+
+  modalCard: {
+    width: "min(780px, 100%)",
+    maxHeight: "85vh",
+    overflow: "hidden",
+    borderRadius: 22,
+    border: "1px solid rgba(0,0,0,0.08)",
+    background: "rgba(255,255,255,0.96)",
+    backdropFilter: "blur(12px)",
+    boxShadow: "0 28px 80px rgba(15,23,42,0.22)",
+    display: "flex",
+    flexDirection: "column",
+  },
+
+  modalHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "16px 18px",
+    borderBottom: "1px solid rgba(0,0,0,0.06)",
+  },
+
+  modalBody: {
+    padding: 18,
+    overflowY: "auto",
+    display: "grid",
+    gap: 12,
+  },
+
+  pointsList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+
+  pointRow: {
+    display: "grid",
+    gridTemplateColumns: "1fr auto",
+    gap: 12,
+    alignItems: "center",
+    padding: 12,
+    borderRadius: 16,
+    border: "1px solid rgba(0,0,0,0.08)",
+    background: "rgba(255,255,255,0.9)",
+  },
+
+  pointMeta: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    minWidth: 0,
+  },
+
+  codeTag: {
+    fontSize: 11,
+    fontWeight: 900,
+    color: "#475569",
+    background: "rgba(15,23,42,0.05)",
+    border: "1px solid rgba(0,0,0,0.06)",
+    borderRadius: 999,
+    padding: "4px 8px",
+    display: "inline-flex",
+    width: "fit-content",
+  },
+
+  dangerBtn: (disabled) => ({
+    borderRadius: 14,
+    padding: "9px 12px",
+    border: "1px solid rgba(220,38,38,0.16)",
+    background: "rgba(220,38,38,0.08)",
+    cursor: disabled ? "not-allowed" : "pointer",
+    fontWeight: 950,
+    fontSize: 12,
+    color: "#dc2626",
+    opacity: disabled ? 0.55 : 1,
+  }),
 };
+
+/* -------------------- Points Modal -------------------- */
+function PointsModal({
+  open,
+  onClose,
+  points,
+  loadingPoints,
+  pointsError,
+  onRefresh,
+  onRemove,
+  removingPointId,
+  robotNgsiId,
+}) {
+  if (!open) return null;
+
+  return (
+    <div style={ui.modalBackdrop} onClick={onClose}>
+      <div style={ui.modalCard} onClick={(e) => e.stopPropagation()}>
+        <div style={ui.modalHeader}>
+          <div>
+            <div style={{ ...ui.title, fontSize: 15 }}>Points</div>
+            <div style={ui.subtle}>
+              Current robot: {robotNgsiId || "No robot mapping"}
+            </div>
+          </div>
+
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            <button
+              type="button"
+              onClick={onRefresh}
+              style={ui.ghostBtn(loadingPoints)}
+              disabled={loadingPoints}
+            >
+              {loadingPoints ? "Refreshing…" : "Refresh"}
+            </button>
+
+            <button type="button" onClick={onClose} style={ui.closeBtn}>
+              Close
+            </button>
+          </div>
+        </div>
+
+        <div style={ui.modalBody}>
+          {pointsError && (
+            <div style={{ color: "#dc2626", fontSize: 13 }}>
+              {pointsError}
+            </div>
+          )}
+
+          <div style={ui.subtle}>
+            Manage reusable positions persisted in Orion. These points can be
+            consumed by task creation and advanced steps.
+          </div>
+
+          <div style={ui.pointsList}>
+            {points.length === 0 && !loadingPoints && (
+              <div style={{ ...ui.card, ...ui.subtle }}>
+                No points found for this robot.
+              </div>
+            )}
+
+            {points.map((p) => {
+              const isRemoving = removingPointId === p.id;
+              const canRemove = !["Point:HOME", "Point:PICK_A", "Point:PLACE_B", "Point:SAFE"].includes(p.id);
+
+              return (
+                <div key={p.id} style={ui.pointRow}>
+                  <div style={ui.pointMeta}>
+                    <div style={{ fontWeight: 950, color: "#0f172a" }}>
+                      {p.label || p.id}
+                    </div>
+
+                    <div style={ui.codeTag}>{p.id}</div>
+
+                    <div style={{ ...ui.subtle, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      <span>Robot: {p.robotId || "—"}</span>
+                      <span>•</span>
+                      <span>Source: {p.source || "seed"}</span>
+                      <span>•</span>
+                      <span>
+                        Joints: {Array.isArray(p.targetJoints) ? p.targetJoints.length : 0}
+                      </span>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => onRemove(p)}
+                    disabled={!canRemove || isRemoving}
+                    style={ui.dangerBtn(!canRemove || isRemoving)}
+                    title={
+                      canRemove
+                        ? "Remove point"
+                        : "Protected default point"
+                    }
+                  >
+                    {!canRemove
+                      ? "Protected"
+                      : isRemoving
+                      ? "Removing…"
+                      : "Remove"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* -------------------- Component -------------------- */
 export default function RobotDetailsModal({
@@ -463,6 +759,8 @@ export default function RobotDetailsModal({
   const [pickPointId, setPickPointId] = useState("");
   const [placePointId, setPlacePointId] = useState("");
   const [busyCreate, setBusyCreate] = useState(false);
+  const [showPointsModal, setShowPointsModal] = useState(false);
+  const [removingPointId, setRemovingPointId] = useState(null);
 
   const [createMode, setCreateMode] = useState("simple");
   const [steps, setSteps] = useState([]);
@@ -510,16 +808,81 @@ export default function RobotDetailsModal({
       idx1,
       total: totalSteps || totalFromArr || 0,
       currentStep,
-      currentStepLabel: formatStep(currentStep),
+      currentStepLabel:
+        currentStep?.action === "move"
+          ? `move → ${getPointDisplayName(currentStep?.pointId, points)}`
+          : formatStep(currentStep),
     };
-  }, [selectedTask]);
+  }, [selectedTask, points]);
+
+  const [savedProcesses, setSavedProcesses] = useState(() =>
+    loadSavedProcessesFromStorage()
+  );
+  const [selectedSavedProcessId, setSelectedSavedProcessId] = useState("");
+  const [processName, setProcessName] = useState("");
+  const [loopMode, setLoopMode] = useState("off"); // off | count | infinite
+  const [loopCount, setLoopCount] = useState(2);
+
+  async function loadPoints() {
+    if (!robotNgsiId) return;
+
+    try {
+      setLoadingPoints(true);
+      setPointsError(null);
+
+      const pts = await listPointsFromOrion(orionConfig, {
+        robotId: robotNgsiId,
+        limit: 200,
+      });
+
+      setPoints(pts);
+
+      if (!pickPointId) {
+        const defPick =
+          pts.find((p) => p.id === "Point:PICK_A") ||
+          pts.find((p) => p.id === "Point:HOME") ||
+          pts[0];
+        if (defPick?.id) setPickPointId(defPick.id);
+      }
+
+      if (!placePointId) {
+        const defPlace =
+          pts.find((p) => p.id === "Point:PLACE_B") ||
+          pts.find((p) => p.id === "Point:SAFE") ||
+          pts[0];
+        if (defPlace?.id) setPlacePointId(defPlace.id);
+      }
+
+      setSteps((prev) => {
+        if (prev.length > 0) return prev;
+
+        const home = pts.find((p) => p.id === "Point:HOME")?.id || "";
+        const pick = pts.find((p) => p.id === "Point:PICK_A")?.id || "";
+        const place = pts.find((p) => p.id === "Point:PLACE_B")?.id || "";
+
+        const init = [];
+        if (home) init.push(makeMoveStep(home));
+        if (pick) init.push(makeMoveStep(pick));
+        if (place) init.push(makeMoveStep(place));
+        if (home) init.push(makeMoveStep(home));
+
+        if (init.length > 0) return init;
+        if (pick && place) return [makeMoveStep(pick), makeMoveStep(place)];
+        if (home) return [makeMoveStep(home)];
+        return [];
+      });
+    } catch (e) {
+      setPointsError(e?.message || "Failed to load points");
+    } finally {
+      setLoadingPoints(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadPoints() {
+    async function loadWithGuard() {
       if (!robotNgsiId) return;
-
       try {
         setLoadingPoints(true);
         setPointsError(null);
@@ -574,7 +937,8 @@ export default function RobotDetailsModal({
       }
     }
 
-    loadPoints();
+    loadWithGuard();
+
     return () => {
       cancelled = true;
     };
@@ -723,45 +1087,63 @@ export default function RobotDetailsModal({
     });
   }
 
-  function applyPreset(preset) {
-    const home = points.find((p) => p.id === "Point:HOME")?.id || "";
-    const pick =
-      pickPointId || points.find((p) => p.id === "Point:PICK_A")?.id || "";
-    const place =
-      placePointId || points.find((p) => p.id === "Point:PLACE_B")?.id || "";
-
-    if (preset === "home") {
-      if (!home) return alert("No Point:HOME found.");
-      setSteps([makeMoveStep(home)]);
-      setProcessId("Process:manual-01");
+  function saveCurrentProcess() {
+    const cleaned = steps.filter(isValidStep);
+    if (!processName.trim()) {
+      alert("Process name is required.");
+      return;
+    }
+    if (cleaned.length === 0) {
+      alert("Add at least one valid step before saving.");
       return;
     }
 
-    if (preset === "pickplace") {
-      if (!pick || !place) return alert("Select Pick and Place points.");
-      setSteps([
-        makeMoveStep(pick),
-        makeStep("grip"),
-        makeMoveStep(place),
-        makeStep("release"),
-      ]);
-      setProcessId("Process:pickplace-01");
+    const entry = {
+      id: `saved-${Date.now()}`,
+      name: processName.trim(),
+      processId: processId || "Process:custom-01",
+      steps: cloneSteps(cleaned),
+      loopMode,
+      loopCount: safeNumber(loopCount, 2),
+      createdAt: new Date().toISOString(),
+    };
+
+    const next = [entry, ...savedProcesses];
+    setSavedProcesses(next);
+    persistSavedProcessesToStorage(next);
+    setSelectedSavedProcessId(entry.id);
+  }
+
+  function loadSavedProcess() {
+    const entry = savedProcesses.find((p) => p.id === selectedSavedProcessId);
+    if (!entry) {
+      alert("Select a saved process.");
       return;
     }
 
-    if (preset === "home_pick_place_home") {
-      if (!home) return alert("No Point:HOME found.");
-      if (!pick || !place) return alert("Select Pick and Place points.");
-      setSteps([
-        makeMoveStep(home),
-        makeMoveStep(pick),
-        makeStep("grip"),
-        makeMoveStep(place),
-        makeStep("release"),
-        makeMoveStep(home),
-      ]);
-      setProcessId("Process:pickplace-01");
+    setProcessName(entry.name || "");
+    setProcessId(entry.processId || "Process:custom-01");
+    setSteps(cloneSteps(entry.steps || []));
+    setLoopMode(entry.loopMode || "off");
+    setLoopCount(safeNumber(entry.loopCount, 2));
+  }
+
+  function deleteSavedProcess() {
+    if (!selectedSavedProcessId) {
+      alert("Select a saved process.");
+      return;
     }
+
+    const entry = savedProcesses.find((p) => p.id === selectedSavedProcessId);
+    const ok = window.confirm(
+      `Delete saved process "${entry?.name || selectedSavedProcessId}"?`
+    );
+    if (!ok) return;
+
+    const next = savedProcesses.filter((p) => p.id !== selectedSavedProcessId);
+    setSavedProcesses(next);
+    persistSavedProcessesToStorage(next);
+    setSelectedSavedProcessId("");
   }
 
   async function onCreateTaskRequest() {
@@ -796,15 +1178,34 @@ export default function RobotDetailsModal({
           return;
         }
 
-        const moveSteps = cleaned.filter((s) => s.action === "move");
+        let finalSteps = cloneSteps(cleaned);
 
-        await createTaskRequestInOrion(orionConfig, {
+        if (loopMode === "count") {
+          finalSteps = expandStepsByCount(finalSteps, loopCount);
+        }
+
+        const moveSteps = finalSteps.filter((s) => s.action === "move");
+
+        const payload = {
           robotId: robotNgsiId,
           processId: processId || "Process:custom-01",
-          steps: cleaned,
+          steps: finalSteps,
           pickPointId: moveSteps?.[0]?.pointId || pickPointId || "",
-          placePointId: moveSteps?.[1]?.pointId || moveSteps?.[moveSteps.length - 1]?.pointId || placePointId || "",
-        });
+          placePointId:
+            moveSteps?.[1]?.pointId ||
+            moveSteps?.[moveSteps.length - 1]?.pointId ||
+            placePointId ||
+            "",
+        };
+
+        if (loopMode === "infinite") {
+          payload.loop = {
+            enabled: true,
+            mode: "infinite",
+          };
+        }
+
+        await createTaskRequestInOrion(orionConfig, payload);
       }
 
       setTasksRefreshToken((v) => v + 1);
@@ -845,6 +1246,45 @@ export default function RobotDetailsModal({
     }
   }
 
+  async function handleRemovePoint(point) {
+    if (!point?.id) return;
+
+    const ok = window.confirm(
+      `Remove point "${point.label || point.id}" from Orion?`
+    );
+    if (!ok) return;
+
+    try {
+      setRemovingPointId(point.id);
+      await deletePointViaOrchestrator(point.id);
+
+      setPoints((prev) => prev.filter((p) => p.id !== point.id));
+
+      if (pickPointId === point.id) setPickPointId("");
+      if (placePointId === point.id) setPlacePointId("");
+
+      setSteps((prev) =>
+        prev.map((step) =>
+          step?.action === "move" && step?.pointId === point.id
+            ? { ...step, pointId: "" }
+            : step
+        )
+      );
+    } catch (e) {
+      alert(e?.message || "Failed to remove point");
+    } finally {
+      setRemovingPointId(null);
+    }
+  }
+
+  function handleOpenCamera() {
+    if (!CAMERA_URL) {
+      alert("Camera URL not configured. Set VITE_CAMERA_URL.");
+      return;
+    }
+    window.open(CAMERA_URL, "_blank", "noopener,noreferrer");
+  }
+
   const canExecuteSelected = useMemo(() => {
     const st = normalizeStatus(selectedTask?.status);
     return st === "queued" || st === "created";
@@ -866,7 +1306,14 @@ export default function RobotDetailsModal({
           </div>
         </div>
 
-        <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center" }}>
+        <div
+          style={{
+            marginLeft: "auto",
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+          }}
+        >
           <div style={ui.pill("neutral")}>
             <span style={{ color: "#64748b" }}>Robot</span>
             <span style={{ fontWeight: 950 }}>{machineId}</span>
@@ -887,6 +1334,22 @@ export default function RobotDetailsModal({
             />
             <span>{headerStatus}</span>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowPointsModal(true)}
+            style={ui.topActionBtn}
+          >
+            Points ({points.length})
+          </button>
+
+          <button
+            type="button"
+            onClick={handleOpenCamera}
+            style={ui.topActionBtn}
+          >
+            Camera
+          </button>
 
           <button onClick={onClose} style={ui.closeBtn}>
             Close
@@ -986,48 +1449,139 @@ export default function RobotDetailsModal({
 
             {createMode === "advanced" && (
               <div style={{ display: "grid", gap: 10 }}>
-                <div style={ui.chipsRow}>
-                  <button type="button" onClick={() => applyPreset("home")} style={ui.chip()}>
-                    HOME
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyPreset("pickplace")}
-                    style={ui.chip()}
-                  >
-                    Pick → Grip → Place → Release
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => applyPreset("home_pick_place_home")}
-                    style={ui.chip()}
-                  >
-                    HOME → Pick → Grip → Place → Release → HOME
-                  </button>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <label style={ui.label}>
+                    Saved process
+                    <select
+                      value={selectedSavedProcessId}
+                      onChange={(e) => setSelectedSavedProcessId(e.target.value)}
+                      style={ui.select}
+                    >
+                      <option value="">Select saved process</option>
+                      {savedProcesses.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
 
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvancedSettings((v) => !v)}
-                    style={ui.chip(showAdvancedSettings)}
-                    title="Advanced settings"
-                  >
-                    ⚙ Settings
-                  </button>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={loadSavedProcess}
+                      style={ui.ghostBtn(false)}
+                    >
+                      Load
+                    </button>
+                    <button
+                      type="button"
+                      onClick={deleteSavedProcess}
+                      style={ui.ghostBtn(!selectedSavedProcessId)}
+                      disabled={!selectedSavedProcessId}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
 
-                {showAdvancedSettings && (
-                  <div style={{ display: "grid", gap: 8 }}>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <label style={ui.label}>
+                    Process name
+                    <input
+                      value={processName}
+                      onChange={(e) => setProcessName(e.target.value)}
+                      placeholder="Pick A to Place B"
+                      style={ui.input}
+                    />
+                  </label>
+
+                  <label style={ui.label}>
+                    Process ID
+                    <input
+                      value={processId}
+                      onChange={(e) => setProcessId(e.target.value)}
+                      placeholder="Process:custom-01"
+                      style={ui.input}
+                    />
+                  </label>
+
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      type="button"
+                      onClick={saveCurrentProcess}
+                      style={ui.ghostBtn(false)}
+                    >
+                      Save process
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setProcessName("");
+                        setProcessId("Process:custom-01");
+                        setSteps([]);
+                        setLoopMode("off");
+                        setLoopCount(2);
+                        setSelectedSavedProcessId("");
+                      }}
+                      style={ui.ghostBtn(false)}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={{ fontWeight: 950, fontSize: 13, color: "#0f172a" }}>
+                    Loop
+                  </div>
+
+                  <div style={ui.chipsRow}>
+                    <button
+                      type="button"
+                      onClick={() => setLoopMode("off")}
+                      style={ui.chip(loopMode === "off")}
+                    >
+                      Off
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLoopMode("count")}
+                      style={ui.chip(loopMode === "count")}
+                    >
+                      Count
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLoopMode("infinite")}
+                      style={ui.chip(loopMode === "infinite")}
+                    >
+                      Infinite
+                    </button>
+                  </div>
+
+                  {loopMode === "count" && (
                     <label style={ui.label}>
-                      Process ID
+                      Repeat count
                       <input
-                        value={processId}
-                        onChange={(e) => setProcessId(e.target.value)}
-                        placeholder="Process:custom-01"
+                        type="number"
+                        min="2"
+                        max="100"
+                        step="1"
+                        value={loopCount}
+                        onChange={(e) => setLoopCount(e.target.value)}
                         style={ui.input}
                       />
                     </label>
-                  </div>
-                )}
+                  )}
+
+                  {loopMode === "infinite" && (
+                    <div style={{ ...ui.subtle, lineHeight: 1.35 }}>
+                      Infinite loop is sent as metadata in the TaskRequest.
+                      The orchestrator/backend must support it.
+                    </div>
+                  )}
+                </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                   <div style={{ fontWeight: 950, fontSize: 13, color: "#0f172a" }}>
@@ -1063,7 +1617,13 @@ export default function RobotDetailsModal({
                       >
                         <div style={ui.stepIndex}>{idx + 1}</div>
 
-                        <div style={{ display: "grid", gridTemplateColumns: "86px 1fr", gap: 8 }}>
+                        <div
+                          style={{
+                            display: "grid",
+                            gridTemplateColumns: "86px 1fr",
+                            gap: 8,
+                          }}
+                        >
                           <select
                             value={st.action || "move"}
                             onChange={(e) => setStepAction(idx, e.target.value)}
@@ -1158,7 +1718,7 @@ export default function RobotDetailsModal({
 
                 <div style={{ ...ui.subtle, lineHeight: 1.35 }}>
                   The <strong>steps[]</strong> list is the source of truth.
-                  Grip/release currently use backend defaults.
+                  Saved processes are currently stored locally in the browser.
                 </div>
               </div>
             )}
@@ -1189,10 +1749,24 @@ export default function RobotDetailsModal({
                 const active = t.id === selectedTaskId;
                 const hasSteps = Array.isArray(t.steps) && t.steps.length > 0;
 
+                const firstStep = t.steps?.[0];
+                const lastStep = t.steps?.[t.steps.length - 1];
+
+                const firstStepLabel = hasSteps
+                  ? formatStepWithPoints(firstStep, points)
+                  : "";
+
+                const lastStepLabel = hasSteps
+                  ? formatStepWithPoints(lastStep, points)
+                  : "";
+
                 const label = hasSteps
-                  ? formatStep(t.steps?.[0]) +
-                    (t.steps.length > 1 ? ` → ${formatStep(t.steps?.[t.steps.length - 1])}` : "")
-                  : `${t.pickPointId || "?"} → ${t.placePointId || "?"}`;
+                  ? firstStepLabel +
+                    (t.steps.length > 1 ? ` → ${lastStepLabel}` : "")
+                  : `${getPointDisplayName(
+                      t.pickPointId,
+                      points
+                    )} → ${getPointDisplayName(t.placePointId, points)}`;
 
                 const progress = getTaskProgressPct(t);
                 const isRemoving = removingId === t.id;
@@ -1277,12 +1851,15 @@ export default function RobotDetailsModal({
                         </strong>
                         <span style={{ color: "#64748b" }}> · </span>
                         <span>
-                          {formatStep(
-                            t.currentStep ||
+                          {(() => {
+                            const activeStep =
+                              t.currentStep ||
                               (hasSteps
                                 ? t.steps[safeNumber(t.currentStepIndex, 0)]
-                                : null)
-                          )}
+                                : null);
+
+                            return formatStepWithPoints(activeStep, points);
+                          })()}
                         </span>
                       </div>
                     )}
@@ -1384,7 +1961,7 @@ export default function RobotDetailsModal({
                     <span style={ui.k}>Target:</span>{" "}
                     <strong>
                       {stepInfo.currentStep?.action === "move"
-                        ? stepInfo.currentStep?.pointId || "—"
+                        ? getPointDisplayName(stepInfo.currentStep?.pointId, points)
                         : stepInfo.currentStep?.action === "sleep"
                         ? `${stepInfo.currentStep?.seconds ?? 1}s`
                         : "Uses backend defaults"}
@@ -1430,10 +2007,27 @@ export default function RobotDetailsModal({
                   {selectedTask ? `${getTaskProgressPct(selectedTask)}%` : "—"}
                 </strong>
               </div>
+
+              <div>
+                <span style={ui.k}>Points loaded:</span>{" "}
+                <strong>{points.length}</strong>
+              </div>
             </div>
           </div>
         </div>
       </div>
+
+      <PointsModal
+        open={showPointsModal}
+        onClose={() => setShowPointsModal(false)}
+        points={points}
+        loadingPoints={loadingPoints}
+        pointsError={pointsError}
+        onRefresh={loadPoints}
+        onRemove={handleRemovePoint}
+        removingPointId={removingPointId}
+        robotNgsiId={robotNgsiId}
+      />
     </div>
   );
 }

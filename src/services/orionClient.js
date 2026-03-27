@@ -1,5 +1,3 @@
-// src/services/orionClient.js
-
 const DEFAULT_ORION_CONFIG = {
   fiwareService: "textileservice",
   fiwareServicePath: "/textile",
