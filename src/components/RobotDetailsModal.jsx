@@ -5,14 +5,19 @@ import {
 } from "../services/orionClientTasks";
 import { listPointsFromOrion } from "../services/orionClientPoints";
 import { createTaskRequestInOrion } from "../services/orionClientTaskRequests";
+import {
+  listProcessDefinitionsFromOrion,
+  createProcessDefinitionInOrion,
+  deleteProcessDefinitionFromOrion,
+} from "../services/orionClientProcessDefinitions";
 
 const UNITY_URL = import.meta.env?.VITE_UNITY_URL || "http://localhost:8001";
 
 const ORCHESTRATOR_URL =
   import.meta.env?.VITE_ORCHESTRATOR_URL || "http://localhost:3005";
 
-const CAMERA_URL = import.meta.env?.VITE_CAMERA_URL || "http://10.11.51.159:8080/stream";
-const SAVED_PROCESSES_KEY = "robot_saved_processes_v1";
+const CAMERA_URL =
+  import.meta.env?.VITE_CAMERA_URL || "http://10.11.51.159:8080/stream";
 
 /* -------------------- small utils -------------------- */
 function normalizeStatus(s) {
@@ -132,20 +137,6 @@ function getTaskCreatedAt(task) {
   return task?.createdAt || task?.requestedAt || task?.acceptedAt || "";
 }
 
-function loadSavedProcessesFromStorage() {
-  try {
-    const raw = window.localStorage.getItem(SAVED_PROCESSES_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function persistSavedProcessesToStorage(processes) {
-  window.localStorage.setItem(SAVED_PROCESSES_KEY, JSON.stringify(processes));
-}
-
 function cloneSteps(steps) {
   return Array.isArray(steps) ? steps.map((s) => ({ ...s })) : [];
 }
@@ -201,11 +192,11 @@ function isValidStep(step) {
 /* -------------------- UI primitives (inline styles) -------------------- */
 const ui = {
   appShell: {
-    minHeight: "100vh",
+    height: "100vh",
     width: "100%",
     padding: 18,
     boxSizing: "border-box",
-    overflow: "auto",
+    overflow: "hidden",
     background:
       "radial-gradient(1200px 600px at 20% 0%, rgba(59,130,246,0.14), transparent 60%)," +
       "radial-gradient(1000px 600px at 90% 10%, rgba(16,185,129,0.10), transparent 55%)," +
@@ -296,8 +287,9 @@ const ui = {
     display: "grid",
     gridTemplateColumns: "380px minmax(0, 1fr) 340px",
     gap: 14,
-    alignItems: "start",
+    alignItems: "stretch",
     minHeight: 0,
+    height: "calc(100vh - 110px)",
   },
 
   panel: {
@@ -307,6 +299,8 @@ const ui = {
     flexDirection: "column",
     minHeight: 0,
     minWidth: 0,
+    height: "100%",
+    overflow: "hidden",
     border: "1px solid rgba(0,0,0,0.06)",
     background: "rgba(255,255,255,0.75)",
     backdropFilter: "blur(10px)",
@@ -327,6 +321,7 @@ const ui = {
     borderRadius: 18,
     background: "rgba(15,23,42,0.02)",
     padding: 12,
+    flexShrink: 0,
   },
 
   cardHeader: {
@@ -456,8 +451,8 @@ const ui = {
     position: "relative",
     marginTop: 12,
     flex: 1,
-    overflowY: "auto",
     minHeight: 0,
+    overflowY: "auto",
     paddingRight: 6,
   },
 
@@ -511,26 +506,26 @@ const ui = {
   }),
 
   heroFrame: {
-      flex: 1,
-    minHeight: 760,
+    flex: 1,
+    minHeight: 0,
+    height: "100%",
     borderRadius: 18,
     background:
       "linear-gradient(180deg, rgba(15,23,42,0.03), rgba(15,23,42,0.01))",
     border: "1px solid rgba(0,0,0,0.06)",
     overflow: "hidden",
     padding: 0,
-    boxSizing: "border-box",  
+    boxSizing: "border-box",
   },
 
   unityFrame: {
     width: "100%",
     height: "100%",
-    minHeight: "700px",
     display: "block",
     border: "none",
     borderRadius: 18,
     background: "white",
-},
+  },
 
   sectionTitle: { fontWeight: 950, marginBottom: 10, color: "#0f172a" },
   kv: {
@@ -692,7 +687,12 @@ function PointsModal({
 
             {points.map((p) => {
               const isRemoving = removingPointId === p.id;
-              const canRemove = !["Point:HOME", "Point:PICK_A", "Point:PLACE_B", "Point:SAFE"].includes(p.id);
+              const canRemove = ![
+                "Point:HOME",
+                "Point:PICK_A",
+                "Point:PLACE_B",
+                "Point:SAFE",
+              ].includes(p.id);
 
               return (
                 <div key={p.id} style={ui.pointRow}>
@@ -703,7 +703,14 @@ function PointsModal({
 
                     <div style={ui.codeTag}>{p.id}</div>
 
-                    <div style={{ ...ui.subtle, display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    <div
+                      style={{
+                        ...ui.subtle,
+                        display: "flex",
+                        gap: 8,
+                        flexWrap: "wrap",
+                      }}
+                    >
                       <span>Robot: {p.robotId || "—"}</span>
                       <span>•</span>
                       <span>Source: {p.source || "seed"}</span>
@@ -728,8 +735,8 @@ function PointsModal({
                     {!canRemove
                       ? "Protected"
                       : isRemoving
-                        ? "Removing…"
-                        : "Remove"}
+                      ? "Removing…"
+                      : "Remove"}
                   </button>
                 </div>
               );
@@ -772,10 +779,20 @@ export default function RobotDetailsModal({
   const [createMode, setCreateMode] = useState("simple");
   const [steps, setSteps] = useState([]);
   const [processId, setProcessId] = useState("Process:pickplace-01");
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
   const [fastPollUntil, setFastPollUntil] = useState(0);
   const [tasksRefreshToken, setTasksRefreshToken] = useState(0);
+
+  const [savedProcesses, setSavedProcesses] = useState([]);
+  const [loadingProcesses, setLoadingProcesses] = useState(false);
+  const [processesError, setProcessesError] = useState(null);
+  const [busySaveProcess, setBusySaveProcess] = useState(false);
+  const [busyDeleteProcessId, setBusyDeleteProcessId] = useState(null);
+
+  const [selectedSavedProcessId, setSelectedSavedProcessId] = useState("");
+  const [processName, setProcessName] = useState("");
+  const [loopMode, setLoopMode] = useState("off");
+  const [loopCount, setLoopCount] = useState(2);
 
   const selectedTask = useMemo(
     () => tasks.find((t) => t.id === selectedTaskId) || null,
@@ -803,7 +820,8 @@ export default function RobotDetailsModal({
     );
 
     const idx0 = safeNumber(selectedTask.currentStepIndex, 0);
-    const idx1 = totalSteps > 0 ? Math.min(totalSteps, Math.max(1, idx0 + 1)) : 0;
+    const idx1 =
+      totalSteps > 0 ? Math.min(totalSteps, Math.max(1, idx0 + 1)) : 0;
 
     const currentStep =
       selectedTask.currentStep ||
@@ -821,14 +839,6 @@ export default function RobotDetailsModal({
           : formatStep(currentStep),
     };
   }, [selectedTask, points]);
-
-  const [savedProcesses, setSavedProcesses] = useState(() =>
-    loadSavedProcessesFromStorage()
-  );
-  const [selectedSavedProcessId, setSelectedSavedProcessId] = useState("");
-  const [processName, setProcessName] = useState("");
-  const [loopMode, setLoopMode] = useState("off"); // off | count | infinite
-  const [loopCount, setLoopCount] = useState(2);
 
   async function loadPoints() {
     if (!robotNgsiId) return;
@@ -882,6 +892,33 @@ export default function RobotDetailsModal({
       setPointsError(e?.message || "Failed to load points");
     } finally {
       setLoadingPoints(false);
+    }
+  }
+
+  async function loadProcesses() {
+    if (!robotNgsiId) return;
+
+    try {
+      setLoadingProcesses(true);
+      setProcessesError(null);
+
+      const defs = await listProcessDefinitionsFromOrion(orionConfig, {
+        robotId: robotNgsiId,
+        limit: 200,
+      });
+
+      const sorted = [...defs].sort((a, b) => {
+        const aa = String(a?.updatedAt || a?.createdAt || "");
+        const bb = String(b?.updatedAt || b?.createdAt || "");
+        if (aa && bb) return bb.localeCompare(aa);
+        return String(a?.label || "").localeCompare(String(b?.label || ""));
+      });
+
+      setSavedProcesses(sorted);
+    } catch (e) {
+      setProcessesError(e?.message || "Failed to load saved processes");
+    } finally {
+      setLoadingProcesses(false);
     }
   }
 
@@ -949,7 +986,49 @@ export default function RobotDetailsModal({
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orionConfig, robotNgsiId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadWithGuard() {
+      if (!robotNgsiId) return;
+
+      try {
+        setLoadingProcesses(true);
+        setProcessesError(null);
+
+        const defs = await listProcessDefinitionsFromOrion(orionConfig, {
+          robotId: robotNgsiId,
+          limit: 200,
+        });
+
+        if (cancelled) return;
+
+        const sorted = [...defs].sort((a, b) => {
+          const aa = String(a?.updatedAt || a?.createdAt || "");
+          const bb = String(b?.updatedAt || b?.createdAt || "");
+          if (aa && bb) return bb.localeCompare(aa);
+          return String(a?.label || "").localeCompare(String(b?.label || ""));
+        });
+
+        setSavedProcesses(sorted);
+      } catch (e) {
+        if (!cancelled) {
+          setProcessesError(e?.message || "Failed to load saved processes");
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingProcesses(false);
+        }
+      }
+    }
+
+    loadWithGuard();
+
+    return () => {
+      cancelled = true;
+    };
   }, [orionConfig, robotNgsiId]);
 
   useEffect(() => {
@@ -1002,7 +1081,6 @@ export default function RobotDetailsModal({
       cancelled = true;
       if (timer) clearInterval(timer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     orionConfig,
     robotNgsiId,
@@ -1094,31 +1172,49 @@ export default function RobotDetailsModal({
     });
   }
 
-  function saveCurrentProcess() {
+  async function saveCurrentProcess() {
     const cleaned = steps.filter(isValidStep);
+
+    if (!robotNgsiId) {
+      alert("No robot mapping available.");
+      return;
+    }
+
     if (!processName.trim()) {
       alert("Process name is required.");
       return;
     }
+
     if (cleaned.length === 0) {
       alert("Add at least one valid step before saving.");
       return;
     }
 
-    const entry = {
-      id: `saved-${Date.now()}`,
-      name: processName.trim(),
-      processId: processId || "Process:custom-01",
-      steps: cloneSteps(cleaned),
-      loopMode,
-      loopCount: safeNumber(loopCount, 2),
-      createdAt: new Date().toISOString(),
-    };
+    try {
+      setBusySaveProcess(true);
 
-    const next = [entry, ...savedProcesses];
-    setSavedProcesses(next);
-    persistSavedProcessesToStorage(next);
-    setSelectedSavedProcessId(entry.id);
+      const payload = {
+        label: processName.trim(),
+        robotId: robotNgsiId,
+        processId: processId || "Process:custom-01",
+        steps: cloneSteps(cleaned),
+        loopMode,
+        loopCount: safeNumber(loopCount, 2),
+        source: "frontend",
+      };
+
+      const saved = await createProcessDefinitionInOrion(orionConfig, payload);
+
+      await loadProcesses();
+
+      if (saved?.id) {
+        setSelectedSavedProcessId(saved.id);
+      }
+    } catch (e) {
+      alert(e?.message || "Failed to save process");
+    } finally {
+      setBusySaveProcess(false);
+    }
   }
 
   function loadSavedProcess() {
@@ -1128,14 +1224,14 @@ export default function RobotDetailsModal({
       return;
     }
 
-    setProcessName(entry.name || "");
+    setProcessName(entry.label || entry.name || "");
     setProcessId(entry.processId || "Process:custom-01");
     setSteps(cloneSteps(entry.steps || []));
     setLoopMode(entry.loopMode || "off");
     setLoopCount(safeNumber(entry.loopCount, 2));
   }
 
-  function deleteSavedProcess() {
+  async function deleteSavedProcess() {
     if (!selectedSavedProcessId) {
       alert("Select a saved process.");
       return;
@@ -1143,14 +1239,20 @@ export default function RobotDetailsModal({
 
     const entry = savedProcesses.find((p) => p.id === selectedSavedProcessId);
     const ok = window.confirm(
-      `Delete saved process "${entry?.name || selectedSavedProcessId}"?`
+      `Delete saved process "${entry?.label || entry?.name || selectedSavedProcessId}"?`
     );
     if (!ok) return;
 
-    const next = savedProcesses.filter((p) => p.id !== selectedSavedProcessId);
-    setSavedProcesses(next);
-    persistSavedProcessesToStorage(next);
-    setSelectedSavedProcessId("");
+    try {
+      setBusyDeleteProcessId(selectedSavedProcessId);
+      await deleteProcessDefinitionFromOrion(selectedSavedProcessId, orionConfig);
+      await loadProcesses();
+      setSelectedSavedProcessId("");
+    } catch (e) {
+      alert(e?.message || "Failed to delete process");
+    } finally {
+      setBusyDeleteProcessId(null);
+    }
   }
 
   async function onCreateTaskRequest() {
@@ -1332,7 +1434,8 @@ export default function RobotDetailsModal({
                 width: 8,
                 height: 8,
                 borderRadius: 999,
-                background: headerStatus === "Running" ? "#f59e0b" : "#64748b",
+                background:
+                  headerStatus === "Running" ? "#f59e0b" : "#64748b",
                 boxShadow:
                   headerStatus === "Running"
                     ? "0 0 0 5px rgba(245,158,11,0.18)"
@@ -1365,7 +1468,7 @@ export default function RobotDetailsModal({
       </div>
 
       <div style={ui.grid}>
-        <div style={ui.panel}>
+        <div style={{ ...ui.panel, minHeight: 0 }}>
           <div style={ui.panelHeaderRow}>
             <div style={ui.panelTitle}>Tasks</div>
             <div style={{ marginLeft: "auto", ...ui.subtle }}>
@@ -1373,7 +1476,7 @@ export default function RobotDetailsModal({
             </div>
           </div>
 
-          <div style={ui.card}>
+          <div style={{ ...ui.card, maxHeight: "52vh", overflowY: "auto" }}>
             <div style={ui.cardHeader}>
               <div>
                 <div style={ui.cardTitle}>Create TaskRequest</div>
@@ -1403,6 +1506,12 @@ export default function RobotDetailsModal({
             {pointsError && (
               <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 10 }}>
                 {pointsError}
+              </div>
+            )}
+
+            {processesError && (
+              <div style={{ fontSize: 12, color: "#dc2626", marginBottom: 10 }}>
+                {processesError}
               </div>
             )}
 
@@ -1463,11 +1572,14 @@ export default function RobotDetailsModal({
                       value={selectedSavedProcessId}
                       onChange={(e) => setSelectedSavedProcessId(e.target.value)}
                       style={ui.select}
+                      disabled={loadingProcesses}
                     >
-                      <option value="">Select saved process</option>
+                      <option value="">
+                        {loadingProcesses ? "Loading processes..." : "Select saved process"}
+                      </option>
                       {savedProcesses.map((p) => (
                         <option key={p.id} value={p.id}>
-                          {p.name}
+                          {p.label || p.name || p.id}
                         </option>
                       ))}
                     </select>
@@ -1477,17 +1589,26 @@ export default function RobotDetailsModal({
                     <button
                       type="button"
                       onClick={loadSavedProcess}
-                      style={ui.ghostBtn(false)}
+                      style={ui.ghostBtn(!selectedSavedProcessId)}
+                      disabled={!selectedSavedProcessId}
                     >
                       Load
                     </button>
                     <button
                       type="button"
                       onClick={deleteSavedProcess}
-                      style={ui.ghostBtn(!selectedSavedProcessId)}
-                      disabled={!selectedSavedProcessId}
+                      style={ui.ghostBtn(
+                        !selectedSavedProcessId ||
+                          busyDeleteProcessId === selectedSavedProcessId
+                      )}
+                      disabled={
+                        !selectedSavedProcessId ||
+                        busyDeleteProcessId === selectedSavedProcessId
+                      }
                     >
-                      Delete
+                      {busyDeleteProcessId === selectedSavedProcessId
+                        ? "Deleting…"
+                        : "Delete"}
                     </button>
                   </div>
                 </div>
@@ -1517,9 +1638,10 @@ export default function RobotDetailsModal({
                     <button
                       type="button"
                       onClick={saveCurrentProcess}
-                      style={ui.ghostBtn(false)}
+                      style={ui.ghostBtn(busySaveProcess)}
+                      disabled={busySaveProcess}
                     >
-                      Save process
+                      {busySaveProcess ? "Saving…" : "Save process"}
                     </button>
                     <button
                       type="button"
@@ -1725,7 +1847,7 @@ export default function RobotDetailsModal({
 
                 <div style={{ ...ui.subtle, lineHeight: 1.35 }}>
                   The <strong>steps[]</strong> list is the source of truth.
-                  Saved processes are currently stored locally in the browser.
+                  Saved processes are now persisted in Orion as reusable process definitions.
                 </div>
               </div>
             )}
@@ -1769,11 +1891,11 @@ export default function RobotDetailsModal({
 
                 const label = hasSteps
                   ? firstStepLabel +
-                  (t.steps.length > 1 ? ` → ${lastStepLabel}` : "")
+                    (t.steps.length > 1 ? ` → ${lastStepLabel}` : "")
                   : `${getPointDisplayName(
-                    t.pickPointId,
-                    points
-                  )} → ${getPointDisplayName(t.placePointId, points)}`;
+                      t.pickPointId,
+                      points
+                    )} → ${getPointDisplayName(t.placePointId, points)}`;
 
                 const progress = getTaskProgressPct(t);
                 const isRemoving = removingId === t.id;
@@ -1896,7 +2018,7 @@ export default function RobotDetailsModal({
             </div>
           </div>
 
-          <div style={{ marginTop: 12 }}>
+          <div style={{ marginTop: 12, flexShrink: 0 }}>
             <button
               onClick={onExecuteSelected}
               disabled={!selectedTask || !canExecuteSelected || busyExecute}
@@ -1912,7 +2034,7 @@ export default function RobotDetailsModal({
           </div>
         </div>
 
-        <div style={ui.panel}>
+        <div style={{ ...ui.panel, minHeight: 0 }}>
           <div style={ui.sectionTitle}>Execution View</div>
 
           <div style={ui.heroFrame}>
@@ -1925,7 +2047,7 @@ export default function RobotDetailsModal({
           </div>
         </div>
 
-        <div style={{ ...ui.panel, overflowY: "auto", minHeight: 0 }}>
+        <div style={{ ...ui.panel, minHeight: 0, overflowY: "auto" }}>
           <div style={ui.sectionTitle}>Robot Status</div>
 
           <div style={ui.kv}>
@@ -1973,8 +2095,8 @@ export default function RobotDetailsModal({
                       {stepInfo.currentStep?.action === "move"
                         ? getPointDisplayName(stepInfo.currentStep?.pointId, points)
                         : stepInfo.currentStep?.action === "sleep"
-                          ? `${stepInfo.currentStep?.seconds ?? 1}s`
-                          : "Uses backend defaults"}
+                        ? `${stepInfo.currentStep?.seconds ?? 1}s`
+                        : "Uses backend defaults"}
                     </strong>
                   </div>
                 </>
@@ -2021,6 +2143,11 @@ export default function RobotDetailsModal({
               <div>
                 <span style={ui.k}>Points loaded:</span>{" "}
                 <strong>{points.length}</strong>
+              </div>
+
+              <div>
+                <span style={ui.k}>Processes loaded:</span>{" "}
+                <strong>{savedProcesses.length}</strong>
               </div>
             </div>
           </div>
