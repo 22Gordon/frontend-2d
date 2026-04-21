@@ -6,10 +6,12 @@ import {
 import { listPointsFromOrion } from "../services/orionClientPoints";
 import { createTaskRequestInOrion } from "../services/orionClientTaskRequests";
 
+const UNITY_URL = import.meta.env?.VITE_UNITY_URL || "http://localhost:8001";
+
 const ORCHESTRATOR_URL =
   import.meta.env?.VITE_ORCHESTRATOR_URL || "http://localhost:3005";
 
-const CAMERA_URL = import.meta.env?.VITE_CAMERA_URL || "";
+const CAMERA_URL = import.meta.env?.VITE_CAMERA_URL || "http://10.11.51.159:8080/stream";
 const SAVED_PROCESSES_KEY = "robot_saved_processes_v1";
 
 /* -------------------- small utils -------------------- */
@@ -509,21 +511,26 @@ const ui = {
   }),
 
   heroFrame: {
-    flex: 1,
-    minHeight: 300,
+      flex: 1,
+    minHeight: 760,
     borderRadius: 18,
     background:
       "linear-gradient(180deg, rgba(15,23,42,0.03), rgba(15,23,42,0.01))",
     border: "1px solid rgba(0,0,0,0.06)",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color: "#64748b",
-    fontSize: 13,
-    textAlign: "center",
-    padding: 24,
-    boxSizing: "border-box",
+    overflow: "hidden",
+    padding: 0,
+    boxSizing: "border-box",  
   },
+
+  unityFrame: {
+    width: "100%",
+    height: "100%",
+    minHeight: "700px",
+    display: "block",
+    border: "none",
+    borderRadius: 18,
+    background: "white",
+},
 
   sectionTitle: { fontWeight: 950, marginBottom: 10, color: "#0f172a" },
   kv: {
@@ -721,8 +728,8 @@ function PointsModal({
                     {!canRemove
                       ? "Protected"
                       : isRemoving
-                      ? "Removing…"
-                      : "Remove"}
+                        ? "Removing…"
+                        : "Remove"}
                   </button>
                 </div>
               );
@@ -1762,11 +1769,11 @@ export default function RobotDetailsModal({
 
                 const label = hasSteps
                   ? firstStepLabel +
-                    (t.steps.length > 1 ? ` → ${lastStepLabel}` : "")
+                  (t.steps.length > 1 ? ` → ${lastStepLabel}` : "")
                   : `${getPointDisplayName(
-                      t.pickPointId,
-                      points
-                    )} → ${getPointDisplayName(t.placePointId, points)}`;
+                    t.pickPointId,
+                    points
+                  )} → ${getPointDisplayName(t.placePointId, points)}`;
 
                 const progress = getTaskProgressPct(t);
                 const isRemoving = removingId === t.id;
@@ -1909,9 +1916,12 @@ export default function RobotDetailsModal({
           <div style={ui.sectionTitle}>Execution View</div>
 
           <div style={ui.heroFrame}>
-            Placeholder for simulation/robot visualization (Unity/stream).
-            <br />
-            For now, execution is reflected via NGSI task states and progress.
+            <iframe
+              src={UNITY_URL}
+              title="Unity Digital Twin"
+              style={ui.unityFrame}
+              allow="fullscreen"
+            />
           </div>
         </div>
 
@@ -1963,8 +1973,8 @@ export default function RobotDetailsModal({
                       {stepInfo.currentStep?.action === "move"
                         ? getPointDisplayName(stepInfo.currentStep?.pointId, points)
                         : stepInfo.currentStep?.action === "sleep"
-                        ? `${stepInfo.currentStep?.seconds ?? 1}s`
-                        : "Uses backend defaults"}
+                          ? `${stepInfo.currentStep?.seconds ?? 1}s`
+                          : "Uses backend defaults"}
                     </strong>
                   </div>
                 </>
