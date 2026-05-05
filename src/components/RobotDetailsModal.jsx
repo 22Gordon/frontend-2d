@@ -19,6 +19,9 @@ const ORCHESTRATOR_URL =
 const CAMERA_URL =
   import.meta.env?.VITE_CAMERA_URL || "http://10.11.51.159:8080/stream";
 
+const MAX_VISIBLE_TASKS = 25;
+const TASK_FETCH_LIMIT = 1000;
+
 /* -------------------- small utils -------------------- */
 function normalizeStatus(s) {
   if (!s) return "";
@@ -51,10 +54,7 @@ function inferRobotNgsiId(machineId, machineData) {
     return maybeEntityId;
   }
 
-  if (
-    typeof maybeRobotId === "string" &&
-    maybeRobotId.startsWith("Robot:")
-  ) {
+  if (typeof maybeRobotId === "string" && maybeRobotId.startsWith("Robot:")) {
     return maybeRobotId;
   }
 
@@ -91,6 +91,35 @@ async function deletePointViaOrchestrator(pointId) {
 function safeNumber(v, fallback = 0) {
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function unwrapNgsiValue(value) {
+  if (value && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, "value")) {
+    return value.value;
+  }
+  return value;
+}
+
+function getTaskTimestamp(task) {
+  const candidates = [
+    task?.completedAt,
+    task?.startedAt,
+    task?.acceptedAt,
+    task?.createdAt,
+    task?.requestedAt,
+    task?.updatedAt,
+    task?.TimeInstant,
+  ];
+
+  for (const value of candidates) {
+    const raw = unwrapNgsiValue(value);
+    if (!raw) continue;
+
+    const ms = Date.parse(raw);
+    if (Number.isFinite(ms)) return ms;
+  }
+
+  return 0;
 }
 
 function formatStep(step) {
@@ -362,6 +391,7 @@ const ui = {
     color: "#0f172a",
     outline: "none",
     boxSizing: "border-box",
+    minWidth: 0,
   },
   select: {
     width: "100%",
@@ -373,6 +403,7 @@ const ui = {
     color: "#0f172a",
     outline: "none",
     boxSizing: "border-box",
+    minWidth: 0,
   },
 
   chipsRow: { display: "flex", gap: 8, flexWrap: "wrap" },
@@ -424,17 +455,17 @@ const ui = {
   },
   stepRow: {
     display: "grid",
-    gridTemplateColumns: "26px 1fr 108px",
+    gridTemplateColumns: "24px minmax(0, 1fr) 104px",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     padding: "10px 10px",
     borderBottom: "1px solid rgba(0,0,0,0.06)",
   },
   stepIndex: { fontSize: 12, fontWeight: 950, color: "#64748b" },
-  stepActions: { display: "flex", justifyContent: "flex-end", gap: 6 },
+  stepActions: { display: "flex", justifyContent: "flex-end", gap: 4 },
   iconBtn: (danger = false, disabled = false) => ({
-    width: 32,
-    height: 32,
+    width: 30,
+    height: 30,
     borderRadius: 12,
     border: "1px solid rgba(0,0,0,0.10)",
     background: "rgba(255,255,255,0.9)",
@@ -726,17 +757,9 @@ function PointsModal({
                     onClick={() => onRemove(p)}
                     disabled={!canRemove || isRemoving}
                     style={ui.dangerBtn(!canRemove || isRemoving)}
-                    title={
-                      canRemove
-                        ? "Remove point"
-                        : "Protected default point"
-                    }
+                    title={canRemove ? "Remove point" : "Protected default point"}
                   >
-                    {!canRemove
-                      ? "Protected"
-                      : isRemoving
-                      ? "Removing…"
-                      : "Remove"}
+                    {!canRemove ? "Protected" : isRemoving ? "Removing…" : "Remove"}
                   </button>
                 </div>
               );
@@ -1042,16 +1065,18 @@ export default function RobotDetailsModal({
         setLoadingTasks((prev) => (tasks.length === 0 ? true : prev));
         setTaskError(null);
 
-        const all = await listTasksFromOrion(orionConfig, { limit: 50 });
+        const all = await listTasksFromOrion(orionConfig, {
+          limit: TASK_FETCH_LIMIT,
+        });
 
         const filtered = all
           .filter((t) => !robotNgsiId || t.robotId === robotNgsiId)
           .sort((a, b) => {
-            const aa = String(getTaskCreatedAt(a));
-            const bb = String(getTaskCreatedAt(b));
-            if (aa && bb) return bb.localeCompare(aa);
+            const byTime = getTaskTimestamp(b) - getTaskTimestamp(a);
+            if (byTime !== 0) return byTime;
             return String(b.id || "").localeCompare(String(a.id || ""));
-          });
+          })
+          .slice(0, MAX_VISIBLE_TASKS);
 
         if (cancelled) return;
 
@@ -1453,11 +1478,7 @@ export default function RobotDetailsModal({
             Points ({points.length})
           </button>
 
-          <button
-            type="button"
-            onClick={handleOpenCamera}
-            style={ui.topActionBtn}
-          >
+          <button type="button" onClick={handleOpenCamera} style={ui.topActionBtn}>
             Camera
           </button>
 
@@ -1470,13 +1491,13 @@ export default function RobotDetailsModal({
       <div style={ui.grid}>
         <div style={{ ...ui.panel, minHeight: 0 }}>
           <div style={ui.panelHeaderRow}>
-            <div style={ui.panelTitle}>Tasks</div>
+            <div style={ui.panelTitle}>Recent Tasks</div>
             <div style={{ marginLeft: "auto", ...ui.subtle }}>
-              {robotNgsiId ? robotNgsiId : "No robot mapping"}
+              Last {MAX_VISIBLE_TASKS} · {robotNgsiId ? robotNgsiId : "No robot mapping"}
             </div>
           </div>
 
-          <div style={{ ...ui.card, maxHeight: "52vh", overflowY: "auto" }}>
+          <div style={{ ...ui.card, maxHeight: "38vh", overflowY: "auto" }}>
             <div style={ui.cardHeader}>
               <div>
                 <div style={ui.cardTitle}>Create TaskRequest</div>
@@ -1733,115 +1754,124 @@ export default function RobotDetailsModal({
                       No steps yet. Add move, grip, release or sleep.
                     </div>
                   ) : (
-                    steps.map((st, idx) => (
-                      <div
-                        key={`${idx}-${st.action || "x"}-${st.pointId || "nopoint"}`}
-                        style={{
-                          ...ui.stepRow,
-                          borderBottom:
-                            idx === steps.length - 1
-                              ? "none"
-                              : "1px solid rgba(0,0,0,0.06)",
-                        }}
-                      >
-                        <div style={ui.stepIndex}>{idx + 1}</div>
+                    steps.map((st, idx) => {
+                      const pointExists = points.some((p) => p.id === st.pointId);
 
+                      return (
                         <div
+                          key={`${idx}-${st.action || "x"}-${st.pointId || "nopoint"}`}
                           style={{
-                            display: "grid",
-                            gridTemplateColumns: "86px 1fr",
-                            gap: 8,
+                            ...ui.stepRow,
+                            borderBottom:
+                              idx === steps.length - 1
+                                ? "none"
+                                : "1px solid rgba(0,0,0,0.06)",
                           }}
                         >
-                          <select
-                            value={st.action || "move"}
-                            onChange={(e) => setStepAction(idx, e.target.value)}
-                            style={ui.select}
-                          >
-                            <option value="move">move</option>
-                            <option value="grip">grip</option>
-                            <option value="release">release</option>
-                            <option value="sleep">sleep</option>
-                          </select>
+                          <div style={ui.stepIndex}>{idx + 1}</div>
 
-                          {st.action === "move" && (
+                          <div
+                            style={{
+                              display: "grid",
+                              gridTemplateColumns: "1fr",
+                              gap: 8,
+                              minWidth: 0,
+                            }}
+                          >
                             <select
-                              value={st.pointId || ""}
-                              onChange={(e) => setStepPoint(idx, e.target.value)}
-                              disabled={loadingPoints || points.length === 0}
+                              value={st.action || "move"}
+                              onChange={(e) => setStepAction(idx, e.target.value)}
                               style={ui.select}
                             >
-                              {points.length === 0 ? (
-                                <option value="">
-                                  {loadingPoints ? "Loading..." : "No points found"}
+                              <option value="move">move</option>
+                              <option value="grip">grip</option>
+                              <option value="release">release</option>
+                              <option value="sleep">sleep</option>
+                            </select>
+
+                            {st.action === "move" && (
+                              <select
+                                value={st.pointId || ""}
+                                onChange={(e) => setStepPoint(idx, e.target.value)}
+                                disabled={loadingPoints || points.length === 0}
+                                style={ui.select}
+                              >
+                                <option value="" disabled>
+                                  Select point
                                 </option>
-                              ) : (
-                                points.map((p) => (
+
+                                {st.pointId && !pointExists && (
+                                  <option value={st.pointId}>
+                                    {st.pointId} (not loaded)
+                                  </option>
+                                )}
+
+                                {points.map((p) => (
                                   <option key={p.id} value={p.id}>
                                     {p.label || p.id}
                                   </option>
-                                ))
-                              )}
-                            </select>
-                          )}
+                                ))}
+                              </select>
+                            )}
 
-                          {st.action === "sleep" && (
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.1"
-                              value={st.seconds ?? 1}
-                              onChange={(e) => setStepSeconds(idx, e.target.value)}
-                              style={ui.input}
-                              placeholder="Seconds"
-                            />
-                          )}
+                            {st.action === "sleep" && (
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                value={st.seconds ?? 1}
+                                onChange={(e) => setStepSeconds(idx, e.target.value)}
+                                style={ui.input}
+                                placeholder="Seconds"
+                              />
+                            )}
 
-                          {(st.action === "grip" || st.action === "release") && (
-                            <div
-                              style={{
-                                ...ui.input,
-                                display: "flex",
-                                alignItems: "center",
-                                color: "#64748b",
-                                background: "rgba(15,23,42,0.03)",
-                              }}
+                            {(st.action === "grip" || st.action === "release") && (
+                              <div
+                                style={{
+                                  ...ui.input,
+                                  display: "flex",
+                                  alignItems: "center",
+                                  color: "#64748b",
+                                  background: "rgba(15,23,42,0.03)",
+                                }}
+                              >
+                                Uses backend defaults
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={ui.stepActions}>
+                            <button
+                              type="button"
+                              onClick={() => moveStep(idx, -1)}
+                              disabled={idx === 0}
+                              style={ui.iconBtn(false, idx === 0)}
+                              title="Move up"
                             >
-                              Uses backend defaults
-                            </div>
-                          )}
+                              ↑
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => moveStep(idx, +1)}
+                              disabled={idx === steps.length - 1}
+                              style={ui.iconBtn(false, idx === steps.length - 1)}
+                              title="Move down"
+                            >
+                              ↓
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeStep(idx)}
+                              style={ui.iconBtn(true, false)}
+                              title="Remove step"
+                            >
+                              ✕
+                            </button>
+                          </div>
                         </div>
-
-                        <div style={ui.stepActions}>
-                          <button
-                            type="button"
-                            onClick={() => moveStep(idx, -1)}
-                            disabled={idx === 0}
-                            style={ui.iconBtn(false, idx === 0)}
-                            title="Move up"
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => moveStep(idx, +1)}
-                            disabled={idx === steps.length - 1}
-                            style={ui.iconBtn(false, idx === steps.length - 1)}
-                            title="Move down"
-                          >
-                            ↓
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeStep(idx)}
-                            style={ui.iconBtn(true, false)}
-                            title="Remove step"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-                    ))
+                      );
+                    })
                   )}
                 </div>
 

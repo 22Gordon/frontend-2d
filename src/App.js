@@ -282,6 +282,10 @@ function App() {
               error={reqState[selectedMachine]?.error}
               onRetry={() => fetchAndSetMachineData(selectedMachine)}
               Spinner={Spinner}
+              showRobotDetailsButton={
+                orionConfigForZone?.fiwareService === "robotservice" ||
+                String(orionConfigForZone?.entityPrefixes || "").includes("RoboticArm:")
+              }
             />
           )}
         </div>

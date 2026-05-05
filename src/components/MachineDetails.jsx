@@ -1,4 +1,3 @@
-// src/components/MachineDetails.jsx
 import React, { useMemo } from "react";
 import "./MachineDetails.css";
 
@@ -20,6 +19,19 @@ const LABELS = {
   TotalReactivePower: "Total Reactive Power",
   distance: "Distance",
   gasUsage: "Gas Usage",
+
+  robot_mode: "Robot Mode",
+  safety_mode: "Safety Mode",
+  runtime_state: "Runtime State",
+  speed_scaling: "Speed Scaling",
+  payload: "Payload",
+  actual_robot_voltage: "Robot Voltage",
+  actual_robot_current: "Robot Current",
+  actual_q: "Actual Joints",
+  actual_TCP_pose: "TCP Pose",
+  actual_TCP_speed: "TCP Speed",
+  actual_TCP_force: "TCP Force",
+  joint_temperatures: "Joint Temperatures",
 };
 
 const UNITS = {
@@ -38,6 +50,10 @@ const UNITS = {
   TotalReactiveEnergy: "varh",
   distance: "mm",
   gasUsage: "",
+
+  payload: "kg",
+  actual_robot_voltage: "V",
+  actual_robot_current: "A",
 };
 
 const ORDER = [
@@ -59,10 +75,23 @@ const ORDER = [
   "distance",
 ];
 
-// ✅ moved outside component (fixes react-hooks/exhaustive-deps warning)
+const ROBOT_SUMMARY_ORDER = [
+  "robot_mode",
+  "safety_mode",
+  "runtime_state",
+  "speed_scaling",
+  "payload",
+  "actual_robot_voltage",
+  "actual_robot_current",
+  "actual_q",
+  "actual_TCP_pose",
+  "actual_TCP_speed",
+  "actual_TCP_force",
+  "joint_temperatures",
+];
+
 const EXCLUDED = new Set(["TimeInstant", "config", "device_info"]);
 
-/* Nº profissional: separador de milhar e casas decimais “inteligentes” */
 function fmtNumber(n, { max = 2 } = {}) {
   return new Intl.NumberFormat(undefined, {
     maximumFractionDigits: max,
@@ -70,32 +99,23 @@ function fmtNumber(n, { max = 2 } = {}) {
   }).format(n);
 }
 
-/**
- * Render genérico de valores:
- * - números com unidades (Adalberto)
- * - strings normais
- * - arrays / objetos (robô) em bloco JSON legível
- */
 function renderValue(key, v) {
   if (v === null || v === undefined) return "—";
 
-  // Números -> formato profissional com unidades
   if (typeof v === "number") {
     const digits = Math.abs(v) >= 100 ? 0 : 2;
     const txt = fmtNumber(v, { max: digits });
     return `${txt}${UNITS[key] ? ` ${UNITS[key]}` : ""}`;
   }
 
-  // Strings simples -> devolvemos tal como vêm
   if (typeof v === "string") {
     return v;
   }
 
-  // Arrays (ex.: joint_temperatures) ou objetos (TCP_pose, force, etc.)
   if (Array.isArray(v) || typeof v === "object") {
     let pretty;
     try {
-      pretty = JSON.stringify(v, null, 2); // indentado para ficar legível
+      pretty = JSON.stringify(v, null, 2);
     } catch {
       pretty = String(v);
     }
@@ -103,7 +123,6 @@ function renderValue(key, v) {
     return <code className="md-json">{pretty}</code>;
   }
 
-  // Fallback genérico
   return String(v);
 }
 
@@ -116,15 +135,41 @@ export default function MachineDetails({
   onOpenRobotDetails,
   Spinner,
   sticky = false,
+  showRobotDetailsButton = false,
 }) {
+  const isRobotContext = useMemo(() => {
+    const machineStr = String(machineId || "").toLowerCase();
+    return (
+      machineStr.includes("braco") ||
+      machineStr.includes("robot") ||
+      data?.actual_q?.value !== undefined ||
+      data?.actual_TCP_pose?.value !== undefined ||
+      data?.robot_mode?.value !== undefined
+    );
+  }, [machineId, data]);
+
   const entries = useMemo(() => {
     if (!data) return [];
 
-    const arr = Object.entries(data).filter(
-      ([k, v]) => !EXCLUDED.has(k) && v?.value !== undefined
-    );
+    const arr = Object.entries(data).filter(([k, v]) => {
+      if (EXCLUDED.has(k)) return false;
+      if (v?.value === undefined) return false;
+      if (v?.value === null || v?.value === "") return false;
+      return true;
+    });
 
-    // ordenação estável: os não listados em ORDER vão para o fim por ordem alfabética
+    if (isRobotContext) {
+      const allowed = new Set(ROBOT_SUMMARY_ORDER);
+
+      return arr
+        .filter(([k]) => allowed.has(k))
+        .sort((a, b) => {
+          const ia = ROBOT_SUMMARY_ORDER.indexOf(a[0]);
+          const ib = ROBOT_SUMMARY_ORDER.indexOf(b[0]);
+          return ia - ib;
+        });
+    }
+
     return arr.sort((a, b) => {
       const ia = ORDER.indexOf(a[0]);
       const ib = ORDER.indexOf(b[0]);
@@ -133,12 +178,14 @@ export default function MachineDetails({
       if (wa !== wb) return wa - wb;
       return a[0].localeCompare(b[0]);
     });
-  }, [data]);
+  }, [data, isRobotContext]);
 
   const timestamp = data?.TimeInstant?.value ?? null;
 
-  // helper: mostrar botão só quando faz sentido
-  const canOpenDetails = !!machineId && typeof onOpenRobotDetails === "function";
+  const canOpenDetails =
+    !!machineId &&
+    !!showRobotDetailsButton &&
+    typeof onOpenRobotDetails === "function";
 
   if (!machineId) {
     return (
@@ -181,8 +228,11 @@ export default function MachineDetails({
             </button>
           )}
           {canOpenDetails && (
-            <button className="btn md-retry" onClick={onOpenRobotDetails}>
-              Open robot details
+            <button
+              className="btn md-retry md-open-details-btn"
+              onClick={onOpenRobotDetails}
+            >
+              Robot details
             </button>
           )}
         </div>
@@ -203,8 +253,11 @@ export default function MachineDetails({
             </button>
           )}
           {canOpenDetails && (
-            <button className="btn md-retry" onClick={onOpenRobotDetails}>
-              Open robot details
+            <button
+              className="btn md-retry md-open-details-btn"
+              onClick={onOpenRobotDetails}
+            >
+              Robot details
             </button>
           )}
         </div>
@@ -214,15 +267,7 @@ export default function MachineDetails({
 
   return (
     <div className={`md-card ${sticky ? "md-sticky" : ""}`}>
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 10,
-          marginBottom: 8,
-        }}
-      >
+      <div className="md-header-row">
         <h2 className="md-title" style={{ margin: 0 }}>
           Machine {machineId}
         </h2>
@@ -230,11 +275,11 @@ export default function MachineDetails({
         {canOpenDetails && (
           <button
             type="button"
-            className="btn btn--solid btn--sm"
+            className="btn btn--solid btn--sm md-open-details-btn"
             onClick={onOpenRobotDetails}
-            title="Open robot details (tasks, status and metrics)"
+            title="Open robot details"
           >
-            Open robot details
+            Robot details
           </button>
         )}
       </div>

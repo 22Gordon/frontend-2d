@@ -124,4 +124,21 @@
 .md-value .md-json{
   text-align:left;
 }
-  
+
+.md-header-row{
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:12px;
+  margin-bottom:12px;
+}
+
+.md-open-details-btn{
+  padding:7px 12px;
+  font-size:13px;
+  line-height:1.2;
+  white-space:nowrap;
+  width:auto;
+  min-width:auto;
+  flex-shrink:0;
+}
